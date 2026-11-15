@@ -55,6 +55,40 @@ docker build --target test .
 
 Runs all unit and integration tests; the build fails if any test fails. No network access is needed: external APIs are replaced by fake HTTP handlers and recorded responses.
 
+### End-to-end tests
+
+A separate suite runs **the shipped Docker image** against [WireMock](https://wiremock.org/) standing in for the four Open-Meteo APIs. The test runner is a third container that calls the API over the Docker network and switches WireMock's behaviour mid-scenario (failures, delays).
+
+```powershell
+./e2e/run.ps1                          # quick scenarios (~30 s)
+./e2e/run.ps1 -Scope all               # + long scenarios (~3.5 min)
+```
+```bash
+./e2e/run.sh            # quick
+./e2e/run.sh all 60     # all, with a 60 s load phase
+```
+
+| Scenario | What it proves | Scope |
+|---|---|---|
+| Smoke | health, 401 without token, token → 200 with all four sources `ok`, 404, statistics | quick |
+| Fallback lifecycle | weather goes down → `stale` with the last values → recovers → `ok` | quick |
+| Circuit-breaker lifecycle | repeated marine failures open the circuit (calls stop reaching the API) → after the break a probe succeeds → closed | quick |
+| Token expiry | a token works until its lifetime ends, then 401 "expired" | quick |
+| Anomaly detection | latency jumps from ~1 ms to 700 ms → the background service logs the anomaly | long |
+| Sustained load | 20 clients for 60 s over 300 cities: all 200, p95 < 2 s, and `/stats` matches the number of calls WireMock received | long |
+
+The e2e environment (`docker-compose.e2e.yml`) shortens timings so scenarios take seconds: 2 s cache, 5 s circuit break, 12 s tokens, 10 s anomaly checks over a 1-minute window.
+
+### Test report
+
+The latest results are in [docs/test-report.md](docs/test-report.md): every test grouped by the requirement it proves (R1–R11, O1–O2), marked as a success or failure scenario, plus line and branch coverage. To regenerate it:
+
+```bash
+docker build --target test-report-export --output type=local,dest=docs .
+```
+
+Tests are tagged with `[Requirement("R6")]` and `[FailureScenario]`; [tools/TestReport.cs](tools/TestReport.cs) (a .NET 10 single-file app) turns the xUnit results into the report, and `dotnet-coverage` with ReportGenerator adds the coverage summary.
+
 ## Endpoints
 
 ### `GET /city-report/{country}/{city}`
@@ -140,7 +174,7 @@ Anonymous liveness check.
 
 ### Performance anomaly logging
 
-A background service checks the statistics every minute and logs a warning when an API's average over the **last 5 minutes** is more than **50% above** its average over all earlier requests (at least 5 requests in each). All values are configurable.
+A background service checks the statistics every minute and logs a warning when an API's average over the **last 5 minutes** is more than **50% above** its average over all earlier requests **and at least 50 ms slower** (at least 5 requests in each). The absolute floor is our interpretation of the brief's "e.g. >50% bigger": a purely relative rule flags normal noise at low latencies (an end-to-end run logged 1.46 ms vs 0.56 ms as an anomaly). `Anomaly:MinimumIncreaseMs` = 0 restores the purely relative rule. All values are configurable.
 
 ## Architecture
 
@@ -208,7 +242,7 @@ Each HTTP client has its own full `Resilience` block, even where the values are 
 | `Relevance` | reference point (the Acropolis) |
 | `RegionMatching` | `MaxEditDistanceRatio` (0.3) |
 | `Statistics` | bucket thresholds |
-| `Anomaly` | `Interval`, `WindowMinutes`, `Ratio`, `MinSamples` |
+| `Anomaly` | `Interval`, `WindowMinutes`, `Ratio`, `MinSamples`, `MinimumIncreaseMs` |
 | `Auth`, `MockAuth` | issuer, audience, required role, clock skew, authority; mock on/off and token lifetime |
 | `OpenApi` | `EnableUi` |
 

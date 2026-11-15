@@ -17,4 +17,7 @@ public sealed class AnomalyOptions
 
     [Range(1, int.MaxValue)]
     public int MinSamples { get; set; } = 5;
+
+    [Range(0.0, 60_000.0)]
+    public double MinimumIncreaseMs { get; set; } = 50;
 }

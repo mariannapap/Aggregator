@@ -18,7 +18,9 @@ public sealed class AnomalyDetector(StatisticsStore store, IOptions<AnomalyOptio
                 continue;
 
             var baselineAverage = (total.TotalMs - recent.TotalMs) / baselineCount;
-            if (recent.AverageMs > baselineAverage * settings.Ratio)
+            var relativelySlower = recent.AverageMs > baselineAverage * settings.Ratio;
+            var noticeablySlower = recent.AverageMs - baselineAverage >= settings.MinimumIncreaseMs;
+            if (relativelySlower && noticeablySlower)
                 anomalies.Add(new PerformanceAnomaly(api, Math.Round(recent.AverageMs, 2), Math.Round(baselineAverage, 2), recent.Count));
         }
 

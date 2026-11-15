@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregator.UnitTests.Caching;
 
+[Requirement("R9")]
 public sealed class StaleAwareCacheTests : IDisposable
 {
     private static readonly Weather Sample = new(new CurrentWeather(18, 5), []);
@@ -50,6 +51,7 @@ public sealed class StaleAwareCacheTests : IDisposable
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task GetAsync_UnavailableWithoutHistory_IsNotCachedAndReturnsUnavailable()
     {
         var calls = 0;
@@ -67,6 +69,7 @@ public sealed class StaleAwareCacheTests : IDisposable
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task GetAsync_FailureAfterExpiry_ServesLastGoodAsStale()
     {
         var freshFor = TimeSpan.FromMilliseconds(50);
@@ -80,6 +83,7 @@ public sealed class StaleAwareCacheTests : IDisposable
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task GetAsync_FailureAfterExpiredNoData_ReturnsUnavailableNotStale()
     {
         var freshFor = TimeSpan.FromMilliseconds(50);

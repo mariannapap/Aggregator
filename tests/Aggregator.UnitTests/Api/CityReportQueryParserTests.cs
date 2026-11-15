@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace Aggregator.UnitTests.Api;
 
+[Requirement("R5")]
 public sealed class CityReportQueryParserTests
 {
     private readonly CityReportQueryParser parser =
@@ -56,6 +57,7 @@ public sealed class CityReportQueryParserTests
     [InlineData("GR", "Athens", null, "population", "sort")]
     [InlineData("GR", "Athens", null, "1", "sort")]
     [InlineData("GR", "Athens", "airQuality", "temperature", "sort")]
+    [Requirement("R6"), FailureScenario]
     public void Parse_InvalidInput_ReportsTheField(string country, string city, string? include, string? sort, string field)
     {
         var result = parser.Parse(new CityReportQuery { Country = country, City = city, Include = include, Sort = sort });
@@ -66,6 +68,7 @@ public sealed class CityReportQueryParserTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public void Parse_HourlyParametersWithoutHourly_AreRejected() =>
         Assert.Contains("hourly", parser.Parse(new CityReportQuery { Country = "GR", City = "Athens", HourlySort = "time" }).Errors.Keys);
 
@@ -75,6 +78,7 @@ public sealed class CityReportQueryParserTests
     [InlineData("hourly.from", null, "yesterday", null, null)]
     [InlineData("hourly.from", null, "2026-11-15T20:00Z", "2026-11-15T18:00Z", null)]
     [InlineData("hourly.sort", null, null, null, "value")]
+    [Requirement("R6"), FailureScenario]
     public void Parse_InvalidHourlyOptions_ReportsTheField(string field, string? category, string? from, string? to, string? sort)
     {
         var result = parser.Parse(new CityReportQuery
@@ -97,6 +101,7 @@ public sealed class CityReportQueryParserTests
     [InlineData("weather,airQuality,hourly", "airQuality", true)]
     [InlineData("hourly", "marine", true)]
     [InlineData("hourly", "weather", true)]
+    [Requirement("R6"), FailureScenario]
     public void Parse_HourlyCategory_MustBeAnIncludedSectionUnlessHourlyIsOnItsOwn(string include, string category, bool valid)
     {
         var result = parser.Parse(new CityReportQuery { Country = "GR", City = "Athens", Include = include, HourlyCategory = category });
@@ -107,14 +112,17 @@ public sealed class CityReportQueryParserTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public void Parse_CityLongerThanConfiguredLimit_IsRejected() =>
         Assert.Contains("city", parser.Parse(new CityReportQuery { Country = "GR", City = new string('a', 101) }).Errors.Keys);
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public void Parse_RegionLongerThanConfiguredLimit_IsRejected() =>
         Assert.Contains("region", parser.Parse(new CityReportQuery { Country = "GR", City = "Athens", Region = new string('a', 21) }).Errors.Keys);
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public void Parse_SeveralProblems_ReportsAllOfThem()
     {
         var result = parser.Parse(new CityReportQuery { Country = "GRC", City = "", Sort = "population" });

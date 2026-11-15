@@ -1,0 +1,14 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPath": "/weather/v1/forecast"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "current": { "time": "2026-11-16T10:00", "interval": 900, "temperature_2m": 18.5, "wind_speed_10m": 7.2 }
+    }
+  }
+}

@@ -3,6 +3,7 @@ using Aggregator.Core.Model;
 
 namespace Aggregator.UnitTests.CityReports;
 
+[Requirement("R5")]
 public sealed class HourlyFilterTests
 {
     private static readonly DateTimeOffset Start = new(2026, 11, 15, 15, 0, 0, TimeSpan.Zero);
@@ -28,6 +29,7 @@ public sealed class HourlyFilterTests
     }
 
     [Fact]
+    [FailureScenario]
     public void ResolveRange_BoundsOutsideWindow_AreClampedAndReported()
     {
         var range = HourlyFilter.ResolveRange(HourlyOptions.Default with { From = Start.AddDays(-1), To = Start.AddDays(3) }, Window);

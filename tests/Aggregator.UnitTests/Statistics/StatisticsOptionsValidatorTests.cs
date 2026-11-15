@@ -9,17 +9,20 @@ public sealed class StatisticsOptionsValidatorTests
     [InlineData(100, 200, true)]
     [InlineData(150, 150, true)]
     [InlineData(300, 200, false)]
+    [Requirement("R11"), FailureScenario]
     public void Statistics_FastThresholdMustNotExceedSlow(int fastBelowMs, int slowAboveMs, bool valid) =>
         Assert.Equal(valid, new StatisticsOptionsValidator()
             .Validate(null, new StatisticsOptions { FastBelowMs = fastBelowMs, SlowAboveMs = slowAboveMs }).Succeeded);
 
     [Fact]
+    [Requirement("O2")]
     public void Anomaly_Defaults_AreValid() =>
         Assert.True(ValidateAnomaly(minutesKept: 10, windowMinutes: 5, interval: TimeSpan.FromMinutes(1)).Succeeded);
 
     [Theory]
     [InlineData(5, 5)]
     [InlineData(10, 15)]
+    [Requirement("O2"), FailureScenario]
     public void Anomaly_HistoryShorterThanWindowPlusCurrentMinute_Fails(int minutesKept, int windowMinutes)
     {
         var result = ValidateAnomaly(minutesKept, windowMinutes, TimeSpan.FromMinutes(1));
@@ -29,6 +32,7 @@ public sealed class StatisticsOptionsValidatorTests
     }
 
     [Fact]
+    [Requirement("O2"), FailureScenario]
     public void Anomaly_IntervalLongerThanWindow_Fails()
     {
         var result = ValidateAnomaly(minutesKept: 10, windowMinutes: 5, interval: TimeSpan.FromHours(1));

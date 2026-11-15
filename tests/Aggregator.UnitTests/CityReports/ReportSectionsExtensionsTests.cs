@@ -3,6 +3,7 @@ using Aggregator.Core.Model;
 
 namespace Aggregator.UnitTests.CityReports;
 
+[Requirement("R5")]
 public sealed class ReportSectionsExtensionsTests
 {
     [Theory]

@@ -4,6 +4,7 @@ using Aggregator.Core.Model;
 
 namespace Aggregator.UnitTests.CityReports;
 
+[Requirement("R5")]
 public sealed class PlaceSorterTests
 {
     private static readonly PlaceReport Athens = Report("Athens", "GR", "Attica", distanceKm: 1.4, temperature: 18);

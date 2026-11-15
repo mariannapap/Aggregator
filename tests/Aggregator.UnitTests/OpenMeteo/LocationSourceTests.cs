@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aggregator.UnitTests.OpenMeteo;
 
+[Requirement("R3")]
 public sealed class LocationSourceTests
 {
     private static readonly HourlyWindow Window = HourlyWindow.StartingAtCurrentHour(Fixtures.RecordedAt, 24);
@@ -53,6 +54,7 @@ public sealed class LocationSourceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task Weather_MissingHourlyRows_ReturnsPartial()
     {
         var times = string.Join(',', Enumerable.Range(0, 23).Select(hour => $"\"{OpenMeteoHttp.FormatHour(Window.Start.AddHours(hour))}\""));
@@ -67,6 +69,7 @@ public sealed class LocationSourceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task Weather_BadRequest_ReturnsNoData()
     {
         var handler = FakeHttpHandler.Returning(Fixtures.Read("error-400.json"), HttpStatusCode.BadRequest);
@@ -77,6 +80,7 @@ public sealed class LocationSourceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task Weather_ServerError_ReturnsUnavailable()
     {
         var handler = FakeHttpHandler.Returning("{}", HttpStatusCode.ServiceUnavailable);
@@ -101,6 +105,7 @@ public sealed class LocationSourceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task AirQuality_NoUsableValues_ReturnsNoData()
     {
         var handler = FakeHttpHandler.Returning("""{"current":{"time":"2026-11-15T15:00"}}""");
@@ -126,6 +131,7 @@ public sealed class LocationSourceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task Marine_Inland_ReturnsNoData()
     {
         var handler = FakeHttpHandler.Returning(Fixtures.Read("marine-inland.json"));

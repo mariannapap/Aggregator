@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace Aggregator.UnitTests.Query;
 
+[Requirement("R5")]
 public sealed class RelevanceCalculatorTests
 {
     private readonly RelevanceCalculator calculator =

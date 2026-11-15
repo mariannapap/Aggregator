@@ -1,0 +1,13 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPath": "/geocoding/v1/search"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"results\":[{\"name\":\"{{request.query.name}}\",\"latitude\":{{randomDecimal lower=35.0 upper=41.0}},\"longitude\":{{randomDecimal lower=20.0 upper=26.0}},\"feature_code\":\"PPLA\",\"country_code\":\"GR\",\"admin1\":\"Attica\"}]}",
+    "transformers": ["response-template"]
+  }
+}

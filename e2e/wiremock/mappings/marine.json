@@ -1,0 +1,14 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPath": "/marine/v1/marine"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "current": { "time": "2026-11-16T10:00", "interval": 900, "wave_height": 0.3, "sea_surface_temperature": 19.5 }
+    }
+  }
+}

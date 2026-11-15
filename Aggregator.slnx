@@ -5,6 +5,7 @@
     <Project Path="src/Aggregator.Infrastructure/Aggregator.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Aggregator.EndToEndTests/Aggregator.EndToEndTests.csproj" />
     <Project Path="tests/Aggregator.IntegrationTests/Aggregator.IntegrationTests.csproj" />
     <Project Path="tests/Aggregator.UnitTests/Aggregator.UnitTests.csproj" />
   </Folder>

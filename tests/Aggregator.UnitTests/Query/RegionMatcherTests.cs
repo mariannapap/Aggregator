@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 
 namespace Aggregator.UnitTests.Query;
 
+[Requirement("R5")]
 public sealed class RegionMatcherTests
 {
     private static readonly string?[] GreekRegions =
@@ -41,6 +42,7 @@ public sealed class RegionMatcherTests
     }
 
     [Fact]
+    [FailureScenario]
     public void Match_NothingClose_IsNotApplied()
     {
         var match = matcher.Match("xyz", GreekRegions);

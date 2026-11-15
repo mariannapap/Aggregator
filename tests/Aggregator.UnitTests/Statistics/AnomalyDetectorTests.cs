@@ -4,6 +4,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Statistics;
 
+[Requirement("O2")]
 public sealed class AnomalyDetectorTests
 {
     private readonly FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 15, 15, 0, 0, TimeSpan.Zero));
@@ -13,7 +14,7 @@ public sealed class AnomalyDetectorTests
     public AnomalyDetectorTests()
     {
         store = new StatisticsStore(Options.Create(new StatisticsOptions()), time);
-        detector = new AnomalyDetector(store, Options.Create(new AnomalyOptions { WindowMinutes = 5, Ratio = 1.5, MinSamples = 5 }));
+        detector = new AnomalyDetector(store, Options.Create(new AnomalyOptions { WindowMinutes = 5, Ratio = 1.5, MinSamples = 5, MinimumIncreaseMs = 50 }));
     }
 
     [Fact]
@@ -39,6 +40,39 @@ public sealed class AnomalyDetectorTests
         RecordMany(5, 140);
 
         Assert.Empty(detector.Detect());
+    }
+
+    [Fact]
+    public void Detect_RelativelySlowerButOnlyByMilliseconds_ReportsNothing()
+    {
+        RecordMany(10, 0.56);
+        time.Advance(TimeSpan.FromMinutes(10));
+        RecordMany(5, 1.46);
+
+        Assert.Empty(detector.Detect());
+    }
+
+    [Theory]
+    [InlineData(69, false)]
+    [InlineData(70, true)]
+    public void Detect_IncreaseAtLeastTheMinimum_IsReported(double recentMs, bool reported)
+    {
+        RecordMany(10, 20);
+        time.Advance(TimeSpan.FromMinutes(10));
+        RecordMany(5, recentMs);
+
+        Assert.Equal(reported, detector.Detect().Count == 1);
+    }
+
+    [Fact]
+    public void Detect_WithoutMinimumIncrease_UsesTheRatioAlone()
+    {
+        var ratioOnly = new AnomalyDetector(store, Options.Create(new AnomalyOptions { WindowMinutes = 5, Ratio = 1.5, MinSamples = 5, MinimumIncreaseMs = 0 }));
+        RecordMany(10, 0.56);
+        time.Advance(TimeSpan.FromMinutes(10));
+        RecordMany(5, 1.46);
+
+        Assert.Single(ratioOnly.Detect());
     }
 
     [Fact]

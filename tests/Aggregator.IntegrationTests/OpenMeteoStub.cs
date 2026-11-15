@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Specialized;
 using System.Globalization;
 using System.Net;
@@ -8,34 +9,88 @@ namespace Aggregator.IntegrationTests;
 
 public sealed class OpenMeteoStub : HttpMessageHandler
 {
+    private readonly ConcurrentDictionary<string, ConcurrentQueue<Func<HttpResponseMessage>>> scripts = new();
+    private readonly ConcurrentDictionary<string, TimeSpan> delays = new();
+    private readonly ConcurrentDictionary<string, bool> down = new();
+    private readonly ConcurrentDictionary<string, int> callsByHost = new();
+    private readonly ConcurrentDictionary<string, int> inFlight = new();
+    private readonly ConcurrentDictionary<string, int> maxInFlight = new();
     private int calls;
 
-    public bool GeocodingDown { get; set; }
+    public bool GeocodingDown { get => IsDown(OpenMeteoHosts.Geocoding); set => SetDown(OpenMeteoHosts.Geocoding, value); }
 
-    public bool AirQualityDown { get; set; }
+    public bool AirQualityDown { get => IsDown(OpenMeteoHosts.AirQuality); set => SetDown(OpenMeteoHosts.AirQuality, value); }
 
-    public bool MarineDown { get; set; }
+    public bool MarineDown { get => IsDown(OpenMeteoHosts.Marine); set => SetDown(OpenMeteoHosts.Marine, value); }
 
     public int Calls => Volatile.Read(ref calls);
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    public int? GeneratedPlaces { get; set; }
+
+    public void SetDown(string host, bool isDown) => down[host] = isDown;
+
+    public void SetDelay(string host, TimeSpan delay) => delays[host] = delay;
+
+    public void Script(string host, params HttpStatusCode[] statuses)
+    {
+        var queue = scripts.GetOrAdd(host, _ => new ConcurrentQueue<Func<HttpResponseMessage>>());
+        foreach (var status in statuses)
+            queue.Enqueue(() => Status(status));
+    }
+
+    public void ScriptTooManyRequests(string host, TimeSpan retryAfter) =>
+        scripts.GetOrAdd(host, _ => new ConcurrentQueue<Func<HttpResponseMessage>>()).Enqueue(() =>
+        {
+            var response = Status(HttpStatusCode.TooManyRequests);
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(retryAfter);
+            return response;
+        });
+
+    public int CallsTo(string host) => callsByHost.GetValueOrDefault(host);
+
+    public int MaxInFlight(string host) => maxInFlight.GetValueOrDefault(host);
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref calls);
         var uri = request.RequestUri!;
-        var query = HttpUtility.ParseQueryString(uri.Query);
-        return Task.FromResult(uri.Host switch
+        var host = uri.Host;
+        callsByHost.AddOrUpdate(host, 1, (_, count) => count + 1);
+        var current = inFlight.AddOrUpdate(host, 1, (_, count) => count + 1);
+        maxInFlight.AddOrUpdate(host, current, (_, max) => Math.Max(max, current));
+        try
         {
-            "geocoding-api.open-meteo.com" when GeocodingDown => Status(HttpStatusCode.ServiceUnavailable),
-            "geocoding-api.open-meteo.com" when query["name"] == "Athens" => Fixture("geocoding-athens-gr.json"),
-            "geocoding-api.open-meteo.com" => Fixture("geocoding-not-found.json"),
-            "api.open-meteo.com" => Json(Series(query, ("temperature_2m", 18.5), ("wind_speed_10m", 7.2))),
-            "air-quality-api.open-meteo.com" when AirQualityDown => Status(HttpStatusCode.InternalServerError),
-            "air-quality-api.open-meteo.com" => Json(Series(query, ("us_aqi", 54))),
-            "marine-api.open-meteo.com" when MarineDown => Status(HttpStatusCode.InternalServerError),
-            "marine-api.open-meteo.com" => Json(Series(query, ("wave_height", 0.1), ("sea_surface_temperature", 20.5))),
-            _ => Status(HttpStatusCode.NotFound)
-        });
+            if (delays.TryGetValue(host, out var delay) && delay > TimeSpan.Zero)
+                await Task.Delay(delay, cancellationToken);
+
+            if (scripts.TryGetValue(host, out var queue) && queue.TryDequeue(out var scripted))
+                return scripted();
+
+            return IsDown(host) ? Status(HttpStatusCode.InternalServerError) : Respond(host, HttpUtility.ParseQueryString(uri.Query));
+        }
+        finally
+        {
+            inFlight.AddOrUpdate(host, 0, (_, count) => count - 1);
+        }
     }
+
+    private HttpResponseMessage Respond(string host, NameValueCollection query) => host switch
+    {
+        OpenMeteoHosts.Geocoding when GeneratedPlaces is { } count => Json(GeocodingResults(count)),
+        OpenMeteoHosts.Geocoding when query["name"] == "Athens" => Fixture("geocoding-athens-gr.json"),
+        OpenMeteoHosts.Geocoding => Fixture("geocoding-not-found.json"),
+        OpenMeteoHosts.Weather => Json(Series(query, ("temperature_2m", 18.5), ("wind_speed_10m", 7.2))),
+        OpenMeteoHosts.AirQuality => Json(Series(query, ("us_aqi", 54))),
+        OpenMeteoHosts.Marine => Json(Series(query, ("wave_height", 0.1), ("sea_surface_temperature", 20.5))),
+        _ => Status(HttpStatusCode.NotFound)
+    };
+
+    private bool IsDown(string host) => down.GetValueOrDefault(host);
+
+    private static string GeocodingResults(int count) =>
+        "{\"results\":[" + string.Join(',', Enumerable.Range(0, count).Select(index => string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""{"name":"Place {{index}}","latitude":{{36 + index * 0.05}},"longitude":{{24 + index * 0.05}},"feature_code":"PPL","country_code":"GR","admin1":"{{(index % 2 == 0 ? "Attica" : "Crete")}}"}"""))) + "]}";
 
     private static string Series(NameValueCollection query, params (string Field, double Value)[] fields)
     {

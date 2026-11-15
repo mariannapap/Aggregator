@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aggregator.UnitTests.OpenMeteo;
 
+[Requirement("R2"), Requirement("R3")]
 public sealed class OpenMeteoLocationClientTests
 {
     private static readonly OpenMeteoEndpoint Endpoint = new(
@@ -48,6 +49,7 @@ public sealed class OpenMeteoLocationClientTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task FetchAsync_MissingCurrentField_WithHourly_ReturnsPartial()
     {
         var result = await Fetch(Json(current: """{"field_a":1.5}""", hours: 24), Query(true, true));
@@ -57,6 +59,7 @@ public sealed class OpenMeteoLocationClientTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task FetchAsync_MissingHourlyRows_ReturnsPartial()
     {
         var result = await Fetch(Json(current: null, hours: 20), Query(false, true));
@@ -66,6 +69,7 @@ public sealed class OpenMeteoLocationClientTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task FetchAsync_NothingUsable_ReturnsNoData()
     {
         var result = await Fetch("""{"current":{"time":"2026-11-15T15:00"}}""", Query(true, false));
@@ -74,6 +78,7 @@ public sealed class OpenMeteoLocationClientTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task FetchAsync_BadRequest_ReturnsNoData()
     {
         var handler = FakeHttpHandler.Returning(Fixtures.Read("error-400.json"), HttpStatusCode.BadRequest);
@@ -84,6 +89,7 @@ public sealed class OpenMeteoLocationClientTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task FetchAsync_ServerError_ReturnsUnavailable()
     {
         var handler = FakeHttpHandler.Returning("{}", HttpStatusCode.BadGateway);
@@ -94,6 +100,7 @@ public sealed class OpenMeteoLocationClientTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task FetchAsync_MalformedJson_ReturnsUnavailable()
     {
         var result = await Fetch("not json", Query(true, false));

@@ -28,7 +28,7 @@ internal sealed partial class AnomalyBackgroundService(
         try
         {
             foreach (var anomaly in detector.Detect())
-                LogAnomaly(anomaly.Api, settings.WindowMinutes, anomaly.RecentAverageMs, anomaly.BaselineAverageMs, anomaly.RecentCount, settings.Ratio);
+                LogAnomaly(anomaly.Api, settings.WindowMinutes, anomaly.RecentAverageMs, anomaly.BaselineAverageMs, anomaly.RecentCount, settings.Ratio, settings.MinimumIncreaseMs);
         }
         catch (Exception exception)
         {
@@ -37,8 +37,8 @@ internal sealed partial class AnomalyBackgroundService(
     }
 
     [LoggerMessage(EventId = 3001, Level = LogLevel.Warning,
-        Message = "Performance anomaly for {Api}: last {WindowMinutes} min average {RecentAverageMs} ms over {RecentCount} requests vs baseline {BaselineAverageMs} ms (threshold x{Ratio})")]
-    private partial void LogAnomaly(string api, int windowMinutes, double recentAverageMs, double baselineAverageMs, long recentCount, double ratio);
+        Message = "Performance anomaly for {Api}: last {WindowMinutes} min average {RecentAverageMs} ms over {RecentCount} requests vs baseline {BaselineAverageMs} ms (threshold x{Ratio} and +{MinimumIncreaseMs} ms)")]
+    private partial void LogAnomaly(string api, int windowMinutes, double recentAverageMs, double baselineAverageMs, long recentCount, double ratio, double minimumIncreaseMs);
 
     [LoggerMessage(EventId = 3002, Level = LogLevel.Error, Message = "Performance anomaly analysis failed")]
     private partial void LogAnalysisFailed(Exception exception);

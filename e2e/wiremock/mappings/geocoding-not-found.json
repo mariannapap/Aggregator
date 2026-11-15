@@ -1,0 +1,13 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/geocoding/v1/search",
+    "queryParameters": { "name": { "equalTo": "Nowhere" } }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"generationtime_ms\":0.1}"
+  }
+}

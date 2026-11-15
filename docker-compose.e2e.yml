@@ -1,0 +1,62 @@
+name: aggregator-e2e
+
+services:
+  wiremock:
+    image: wiremock/wiremock:3.13.2
+    volumes:
+      - ./e2e/wiremock:/home/wiremock:ro
+
+  api:
+    build:
+      context: .
+      target: final
+    image: aggregator-api
+    depends_on:
+      - wiremock
+    user: "0"
+    entrypoint: ["sh", "-c", "dotnet Aggregator.Api.dll 2>&1 | tee /logs/api.log"]
+    volumes:
+      - logs:/logs
+    environment:
+      MockAuth__Enabled: "true"
+      MockAuth__Lifetime: "00:00:12"
+      Auth__ClockSkew: "00:00:00"
+      Anomaly__Interval: "00:00:10"
+      Anomaly__WindowMinutes: "1"
+      Anomaly__MinSamples: "3"
+      Statistics__RecentMinutesKept: "3"
+      HttpClients__Geocoding__BaseUrl: "http://wiremock:8080/geocoding/"
+      HttpClients__Weather__BaseUrl: "http://wiremock:8080/weather/"
+      HttpClients__Weather__CacheTtl: "00:00:02"
+      HttpClients__AirQuality__BaseUrl: "http://wiremock:8080/air-quality/"
+      HttpClients__AirQuality__CacheTtl: "00:00:02"
+      HttpClients__Marine__BaseUrl: "http://wiremock:8080/marine/"
+      HttpClients__Marine__CacheTtl: "00:00:02"
+      HttpClients__Weather__Resilience__Retry__MaxRetryAttempts: "1"
+      HttpClients__Weather__Resilience__Retry__Delay: "00:00:00.050"
+      HttpClients__AirQuality__Resilience__Retry__MaxRetryAttempts: "1"
+      HttpClients__AirQuality__Resilience__Retry__Delay: "00:00:00.050"
+      HttpClients__Marine__Resilience__Retry__MaxRetryAttempts: "1"
+      HttpClients__Marine__Resilience__Retry__Delay: "00:00:00.050"
+      HttpClients__Marine__Resilience__CircuitBreaker__MinimumThroughput: "5"
+      HttpClients__Marine__Resilience__CircuitBreaker__SamplingDuration: "00:00:10"
+      HttpClients__Marine__Resilience__CircuitBreaker__BreakDuration: "00:00:05"
+
+  e2e-tests:
+    build:
+      context: .
+      target: e2e
+    depends_on:
+      - api
+      - wiremock
+    volumes:
+      - logs:/logs:ro
+    environment:
+      E2E_API_URL: "http://api:8080"
+      E2E_WIREMOCK_URL: "http://wiremock:8080"
+      E2E_API_LOG: "/logs/api.log"
+      E2E_SCOPE: "${E2E_SCOPE:-quick}"
+      E2E_LOAD_SECONDS: "${E2E_LOAD_SECONDS:-60}"
+
+volumes:
+  logs:

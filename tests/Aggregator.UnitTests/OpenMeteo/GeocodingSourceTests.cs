@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace Aggregator.UnitTests.OpenMeteo;
 
+[Requirement("R3")]
 public sealed class GeocodingSourceTests
 {
     private static readonly GeocodingOptions Settings = new()
@@ -48,6 +49,7 @@ public sealed class GeocodingSourceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task FetchAsync_NoResultsKey_ReturnsNoData()
     {
         var handler = FakeHttpHandler.Returning(Fixtures.Read("geocoding-not-found.json"));
@@ -58,6 +60,7 @@ public sealed class GeocodingSourceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task FetchAsync_ServerError_ReturnsUnavailable()
     {
         var handler = FakeHttpHandler.Returning("{}", HttpStatusCode.InternalServerError);
@@ -68,6 +71,7 @@ public sealed class GeocodingSourceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task FetchAsync_NetworkFailure_ReturnsUnavailable()
     {
         var handler = new FakeHttpHandler(_ => throw new HttpRequestException("connection refused"));

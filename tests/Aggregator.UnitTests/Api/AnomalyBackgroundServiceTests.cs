@@ -7,6 +7,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Api;
 
+[Requirement("O2")]
 public sealed class AnomalyBackgroundServiceTests
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
@@ -33,6 +34,7 @@ public sealed class AnomalyBackgroundServiceTests
     }
 
     [Fact]
+    [FailureScenario]
     public async Task Tick_DetectorThrows_LogsErrorAndKeepsRunning()
     {
         var calls = 0;

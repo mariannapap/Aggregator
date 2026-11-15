@@ -4,6 +4,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Statistics;
 
+[Requirement("R11")]
 public sealed class StatisticsStoreTests
 {
     private readonly FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 15, 15, 0, 0, TimeSpan.Zero));
@@ -55,6 +56,38 @@ public sealed class StatisticsStoreTests
         Assert.All(snapshots, snapshot =>
             Assert.Equal(snapshot.TotalRequests, snapshot.Fast.Count + snapshot.Average.Count + snapshot.Slow.Count));
         Assert.Equal(writers * perWriter / 2, store.Recent("weather", 1).Count);
+    }
+
+    [Fact]
+    public async Task Snapshot_WhileWritersRun_IsAlwaysInternallyConsistent()
+    {
+        var store = CreateStore();
+        using var stop = new CancellationTokenSource();
+
+        var writers = Enumerable.Range(0, 8).Select(writer => Task.Run(() =>
+        {
+            var i = 0;
+            while (!stop.IsCancellationRequested)
+                store.Record("weather", TimeSpan.FromMilliseconds(i++ % 300));
+        }, TestContext.Current.CancellationToken)).ToList();
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (store.Total("weather").Count < 10_000 && DateTime.UtcNow < deadline)
+            await Task.Delay(5, TestContext.Current.CancellationToken);
+        var countWhenReadingStarted = store.Total("weather").Count;
+
+        for (var snapshots = 0; snapshots < 2_000; snapshots++)
+        {
+            foreach (var snapshot in store.Snapshot())
+                Assert.Equal(snapshot.TotalRequests, snapshot.Fast.Count + snapshot.Average.Count + snapshot.Slow.Count);
+        }
+
+        var countWhenReadingEnded = store.Total("weather").Count;
+        await stop.CancelAsync();
+        await Task.WhenAll(writers);
+
+        Assert.True(countWhenReadingStarted >= 10_000, "Writers never got going.");
+        Assert.True(countWhenReadingEnded > countWhenReadingStarted, "Writers were not running while snapshots were taken.");
     }
 
     [Fact]

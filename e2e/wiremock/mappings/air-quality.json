@@ -1,0 +1,14 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPath": "/air-quality/v1/air-quality"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "current": { "time": "2026-11-16T10:00", "interval": 3600, "us_aqi": 54 }
+    }
+  }
+}

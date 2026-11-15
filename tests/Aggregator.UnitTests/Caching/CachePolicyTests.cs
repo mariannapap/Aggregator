@@ -5,6 +5,7 @@ using Aggregator.Infrastructure.Options;
 
 namespace Aggregator.UnitTests.Caching;
 
+[Requirement("R9")]
 public sealed class CachePolicyTests
 {
     private static readonly SourceClientOptions Settings = new()

@@ -22,6 +22,7 @@ public sealed class CityReportServiceTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task GetAsync_GeocodingUnavailable_ReturnsGeocodingUnavailable()
     {
         geocoding.Respond = _ => SourceResult.Unavailable<IReadOnlyList<Place>>();
@@ -33,6 +34,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task GetAsync_NoPlaces_ReturnsCityNotFound()
     {
         geocoding.Respond = _ => SourceResult.NoData<IReadOnlyList<Place>>();
@@ -43,6 +45,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task GetAsync_StaleGeocoding_StillBuildsReportAndReportsStatus()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]).AsStale();
@@ -60,6 +63,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R3"), Requirement("R4")]
     public async Task GetAsync_DefaultRequest_CallsEveryLocationSourcePerPlaceWithoutHourly()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens, Airport]);
@@ -73,6 +77,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R4")]
     public async Task GetAsync_Marine_MapsCurrentValuesPerPlace()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens, Airport]);
@@ -86,6 +91,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
     public async Task GetAsync_MarineNoDataInland_KeepsOtherSectionsAndReportsNoData()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
@@ -99,6 +105,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5")]
     public async Task GetAsync_HourlyMarineOnly_CallsOnlyMarineForHourlyRows()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
@@ -117,6 +124,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5")]
     public async Task GetAsync_HourlyCategory_RestrictsHourlyRowsToThatSection()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
@@ -135,6 +143,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5")]
     public async Task GetAsync_HourlyWithSections_FetchesHourlyOnlyForIncludedSections()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
@@ -147,6 +156,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5")]
     public async Task GetAsync_HourlyOnly_FetchesHourlyFromEverySection()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
@@ -159,6 +169,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5")]
     public async Task GetAsync_WeatherNotIncluded_DoesNotCallWeather()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
@@ -170,6 +181,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5")]
     public async Task GetAsync_RegionMatches_FiltersPlacesBeforeCallingSources()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens, Chania]);
@@ -182,6 +194,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5"), FailureScenario]
     public async Task GetAsync_RegionDoesNotMatch_IgnoresFilterAndReportsIt()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens, Chania]);
@@ -193,6 +206,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5")]
     public async Task GetAsync_DefaultSort_IsNearestToReferenceFirst()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Chania, Airport, Athens]);
@@ -203,6 +217,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5")]
     public async Task GetAsync_SortByTemperatureDescending_PutsMissingTemperaturesLast()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens, Airport, Chania]);
@@ -219,6 +234,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5")]
     public async Task GetAsync_Hourly_MergesFiltersAndSortsRows()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
@@ -244,6 +260,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
+    [Requirement("R5"), FailureScenario]
     public async Task GetAsync_HourlyRangeOutsideWindow_IsClampedAndReported()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);

@@ -29,6 +29,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="Aggregator.Testing" />
+    <Compile Include="..\Shared\*.cs" LinkBase="Shared" />
     <None Include="TestData\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

@@ -3,6 +3,7 @@ using System.Text.Json;
 
 namespace Aggregator.IntegrationTests;
 
+[Requirement("R8")]
 public sealed class OpenApiDocumentTests
 {
     private const string CityReportPath = "/city-report/{country}/{city}";
@@ -10,6 +11,7 @@ public sealed class OpenApiDocumentTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Requirement("O1")]
     public async Task Document_DeclaresBearerSchemeOnceAndNoGlobalRequirement()
     {
         var document = await GetDocumentAsync();
@@ -21,6 +23,7 @@ public sealed class OpenApiDocumentTests
     [Theory]
     [InlineData(CityReportPath, "get")]
     [InlineData("/stats", "get")]
+    [Requirement("O1")]
     public async Task ProtectedOperations_RequireBearerAndDocument401And403(string path, string method)
     {
         var operation = Operation(await GetDocumentAsync(), path, method);
@@ -32,6 +35,7 @@ public sealed class OpenApiDocumentTests
     }
 
     [Fact]
+    [Requirement("O1")]
     public async Task MockLogin_IsAnonymousInTheDocument()
     {
         var operation = Operation(await GetDocumentAsync(), "/mock-login", "post");

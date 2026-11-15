@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 
 namespace Aggregator.UnitTests.Api;
 
+[Requirement("O1")]
 public sealed class AuthOptionsValidatorTests
 {
     [Fact]
@@ -12,6 +13,7 @@ public sealed class AuthOptionsValidatorTests
     [Theory]
     [InlineData(null)]
     [InlineData(" ")]
+    [FailureScenario]
     public void Validate_MockDisabledWithoutAuthority_Fails(string? authority)
     {
         var result = Validate(mockEnabled: false, authority);
@@ -24,6 +26,7 @@ public sealed class AuthOptionsValidatorTests
     [InlineData("http://login.example.com/tenant", false)]
     [InlineData("not a url", false)]
     [InlineData("https://login.microsoftonline.com/tenant/v2.0", true)]
+    [FailureScenario]
     public void Validate_MockDisabled_RequiresAbsoluteHttpsAuthority(string authority, bool valid) =>
         Assert.Equal(valid, Validate(mockEnabled: false, authority).Succeeded);
 
