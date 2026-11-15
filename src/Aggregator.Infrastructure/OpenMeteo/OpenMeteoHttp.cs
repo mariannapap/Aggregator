@@ -1,0 +1,51 @@
+using System.Globalization;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
+
+namespace Aggregator.Infrastructure.OpenMeteo;
+
+internal static class OpenMeteoHttp
+{
+    private const string TimeFormat = "yyyy-MM-dd'T'HH:mm";
+
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+
+    public static async Task<OpenMeteoResponse<T>> GetAsync<T>(
+        HttpClient http,
+        string relativeUri,
+        string source,
+        ILogger logger,
+        CancellationToken cancellationToken)
+        where T : class
+    {
+        try
+        {
+            using var response = await http.GetAsync(new Uri(relativeUri, UriKind.Relative), cancellationToken);
+            if (response.StatusCode == HttpStatusCode.BadRequest)
+            {
+                var error = await response.Content.ReadFromJsonAsync<OpenMeteoError>(SerializerOptions, cancellationToken);
+                logger.RequestRejected(source, error?.Reason);
+                return new OpenMeteoResponse<T>(OpenMeteoOutcome.Rejected, null);
+            }
+
+            response.EnsureSuccessStatusCode();
+            var body = await response.Content.ReadFromJsonAsync<T>(SerializerOptions, cancellationToken);
+            return new OpenMeteoResponse<T>(body is null ? OpenMeteoOutcome.Failed : OpenMeteoOutcome.Success, body);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.CallFailed(source, exception);
+            return new OpenMeteoResponse<T>(OpenMeteoOutcome.Failed, null);
+        }
+    }
+
+    public static string FormatHour(DateTimeOffset time) =>
+        time.ToUniversalTime().ToString(TimeFormat, CultureInfo.InvariantCulture);
+
+    public static DateTimeOffset ParseTime(string value) =>
+        DateTimeOffset.ParseExact(value, TimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
+    public static string FormatCoordinate(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+}

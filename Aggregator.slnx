@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Aggregator.Api/Aggregator.Api.csproj" />
+    <Project Path="src/Aggregator.Core/Aggregator.Core.csproj" />
+    <Project Path="src/Aggregator.Infrastructure/Aggregator.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Aggregator.IntegrationTests/Aggregator.IntegrationTests.csproj" />
+    <Project Path="tests/Aggregator.UnitTests/Aggregator.UnitTests.csproj" />
+  </Folder>
+</Solution>

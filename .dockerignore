@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/TestResults/
+.git/
+Documentation/
+.env
+Dockerfile
+docker-compose.yml

@@ -1,0 +1,11 @@
+services:
+  api:
+    build:
+      context: .
+      target: final
+    image: aggregator-api
+    ports:
+      - "8080:8080"
+    environment:
+      MockAuth__Enabled: "true"
+      OpenApi__EnableUi: "true"
