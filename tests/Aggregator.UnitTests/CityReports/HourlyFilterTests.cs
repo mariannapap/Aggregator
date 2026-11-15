@@ -73,13 +73,15 @@ public sealed class HourlyFilterTests
     public void Apply_SameHour_IsOrderedByCategoryThenMetric()
     {
         var range = new HourlyRange(null, null, Start, Start);
-        var rows = Rows(HourlyCategory.AirQuality, "usAqi", 1)
+        var rows = Rows(HourlyCategory.Marine, "waveHeight", 1)
+            .Concat(Rows(HourlyCategory.AirQuality, "usAqi", 1))
+            .Concat(Rows(HourlyCategory.Marine, "seaSurfaceTemperature", 1))
             .Concat(Rows(HourlyCategory.Weather, "windSpeed", 1))
             .Concat(Rows(HourlyCategory.Weather, "temperature", 1));
 
         var ordered = HourlyFilter.Apply(rows, range, descending: false);
 
-        Assert.Equal(["temperature", "windSpeed", "usAqi"], ordered.Select(row => row.Metric));
+        Assert.Equal(["temperature", "windSpeed", "usAqi", "seaSurfaceTemperature", "waveHeight"], ordered.Select(row => row.Metric));
     }
 
     [Fact]

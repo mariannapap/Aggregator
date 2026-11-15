@@ -94,5 +94,6 @@ public sealed class PlaceSorterTests
             SourceStatus.Ok,
             temperature is null ? SourceResult.Unavailable<Weather>() : SourceResult.Ok(new Weather(new CurrentWeather(temperature.Value, 5), [])),
             null,
+            null,
             null);
 }

@@ -8,4 +8,5 @@ public sealed record PlaceReport(
     SourceStatus GeocodingStatus,
     SourceResult<Weather>? Weather,
     SourceResult<AirQuality>? AirQuality,
+    SourceResult<Marine>? Marine,
     IReadOnlyList<HourlyReading>? Hourly);

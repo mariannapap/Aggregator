@@ -14,6 +14,8 @@ public sealed class OpenMeteoStub : HttpMessageHandler
 
     public bool AirQualityDown { get; set; }
 
+    public bool MarineDown { get; set; }
+
     public int Calls => Volatile.Read(ref calls);
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -29,6 +31,8 @@ public sealed class OpenMeteoStub : HttpMessageHandler
             "api.open-meteo.com" => Json(Series(query, ("temperature_2m", 18.5), ("wind_speed_10m", 7.2))),
             "air-quality-api.open-meteo.com" when AirQualityDown => Status(HttpStatusCode.InternalServerError),
             "air-quality-api.open-meteo.com" => Json(Series(query, ("us_aqi", 54))),
+            "marine-api.open-meteo.com" when MarineDown => Status(HttpStatusCode.InternalServerError),
+            "marine-api.open-meteo.com" => Json(Series(query, ("wave_height", 0.1), ("sea_surface_temperature", 20.5))),
             _ => Status(HttpStatusCode.NotFound)
         });
     }

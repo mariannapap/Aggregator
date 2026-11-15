@@ -31,6 +31,8 @@ internal static class CityReportMapper
             sources[SourceNames.Weather] = weather.Status.ToContract();
         if (report.AirQuality is { } airQuality)
             sources[SourceNames.AirQuality] = airQuality.Status.ToContract();
+        if (report.Marine is { } marine)
+            sources[SourceNames.Marine] = marine.Status.ToContract();
 
         return new PlaceResponse(
             report.Place.Name,
@@ -40,10 +42,19 @@ internal static class CityReportMapper
             Math.Round(report.DistanceKm, 1),
             report.Weather?.Value?.Current is { } currentWeather ? new WeatherResponse(currentWeather.Temperature, currentWeather.WindSpeed) : null,
             report.AirQuality?.Value?.Current is { } currentAirQuality ? new AirQualityResponse(currentAirQuality.UsAqi) : null,
+            report.Marine?.Value?.Current is { } currentMarine ? new MarineResponse(currentMarine.WaveHeight, currentMarine.SeaSurfaceTemperature) : null,
             report.Hourly?.Select(ToResponse).ToList(),
             sources);
     }
 
     private static HourlyReadingResponse ToResponse(HourlyReading reading) =>
-        new(reading.Time, reading.Category == HourlyCategory.Weather ? SourceNames.Weather : SourceNames.AirQuality, reading.Metric, reading.Value, reading.Unit);
+        new(reading.Time, ToContract(reading.Category), reading.Metric, reading.Value, reading.Unit);
+
+    private static string ToContract(HourlyCategory category) => category switch
+    {
+        HourlyCategory.Weather => SourceNames.Weather,
+        HourlyCategory.AirQuality => SourceNames.AirQuality,
+        HourlyCategory.Marine => SourceNames.Marine,
+        _ => throw new ArgumentOutOfRangeException(nameof(category), category, null)
+    };
 }

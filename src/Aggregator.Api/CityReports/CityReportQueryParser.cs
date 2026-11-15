@@ -10,12 +10,13 @@ namespace Aggregator.Api.CityReports;
 internal sealed class CityReportQueryParser(IOptions<CityReportOptions> options)
 {
     private const string HourlyToken = "hourly";
-    private const ReportSections DefaultSections = ReportSections.Weather | ReportSections.AirQuality;
+    private const ReportSections DefaultSections = ReportSectionsExtensions.DataSections;
 
     private static readonly FrozenDictionary<string, ReportSections> Sections = new Dictionary<string, ReportSections>
     {
         [SourceNames.Weather] = ReportSections.Weather,
         [SourceNames.AirQuality] = ReportSections.AirQuality,
+        [SourceNames.Marine] = ReportSections.Marine,
         [HourlyToken] = ReportSections.Hourly
     }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
@@ -29,7 +30,8 @@ internal sealed class CityReportQueryParser(IOptions<CityReportOptions> options)
     private static readonly FrozenDictionary<string, HourlyCategory> HourlyCategories = new Dictionary<string, HourlyCategory>
     {
         [SourceNames.Weather] = HourlyCategory.Weather,
-        [SourceNames.AirQuality] = HourlyCategory.AirQuality
+        [SourceNames.AirQuality] = HourlyCategory.AirQuality,
+        [SourceNames.Marine] = HourlyCategory.Marine
     }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     private static readonly FrozenDictionary<string, bool> HourlySortDescending = new Dictionary<string, bool>
@@ -75,7 +77,7 @@ internal sealed class CityReportQueryParser(IOptions<CityReportOptions> options)
         {
             if (!Sections.TryGetValue(token, out var section))
             {
-                errors["include"] = ["Allowed values: weather, airQuality, hourly (comma-separated)."];
+                errors["include"] = ["Allowed values: weather, airQuality, marine, hourly (comma-separated)."];
                 return DefaultSections;
             }
 
@@ -116,10 +118,12 @@ internal sealed class CityReportQueryParser(IOptions<CityReportOptions> options)
         HourlyCategory? category = null;
         if (!string.IsNullOrWhiteSpace(query.HourlyCategory))
         {
-            if (HourlyCategories.TryGetValue(query.HourlyCategory.Trim(), out var parsed))
-                category = parsed;
+            if (!HourlyCategories.TryGetValue(query.HourlyCategory.Trim(), out var parsed))
+                errors["hourly.category"] = ["Allowed values: weather, airQuality, marine."];
+            else if (!sections.IncludesHourlyFor(parsed))
+                errors["hourly.category"] = [$"hourly.category={query.HourlyCategory.Trim()} requires that section in include (or include=hourly on its own)."];
             else
-                errors["hourly.category"] = ["Allowed values: weather, airQuality."];
+                category = parsed;
         }
 
         var from = ParseTime(query.HourlyFrom, "hourly.from", errors);

@@ -8,5 +8,6 @@ public sealed record PlaceResponse(
     double DistanceKm,
     WeatherResponse? Weather,
     AirQualityResponse? AirQuality,
+    MarineResponse? Marine,
     IReadOnlyList<HourlyReadingResponse>? Hourly,
     IReadOnlyDictionary<string, string> Sources);

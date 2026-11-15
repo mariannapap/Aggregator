@@ -110,6 +110,34 @@ public sealed class LocationSourceTests
         Assert.Equal(SourceStatus.NoData, result.Status);
     }
 
+    [Fact]
+    public async Task Marine_Coast_ParsesWavesAndSeaTemperature()
+    {
+        var handler = FakeHttpHandler.Returning(Fixtures.Read("marine-piraeus.json"));
+
+        var result = await Marine(handler).FetchAsync(new LocationQuery(new Coordinates(37.94, 23.64), 2, true, Window), Ct);
+
+        Assert.Equal(SourceStatus.Ok, result.Status);
+        Assert.NotNull(result.Value!.Current);
+        Assert.Equal(48, result.Value.Hourly.Count);
+        Assert.Contains(result.Value.Hourly, reading => reading is { Metric: "waveHeight", Unit: "m", Category: HourlyCategory.Marine });
+        Assert.Contains(result.Value.Hourly, reading => reading is { Metric: "seaSurfaceTemperature", Unit: "°C" });
+        Assert.StartsWith("/v1/marine?latitude=37.94&longitude=23.64", Assert.Single(handler.Requests).PathAndQuery, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Marine_Inland_ReturnsNoData()
+    {
+        var handler = FakeHttpHandler.Returning(Fixtures.Read("marine-inland.json"));
+
+        var result = await Marine(handler).FetchAsync(new LocationQuery(new Coordinates(39.66, 20.85), 2, true, Window), Ct);
+
+        Assert.Equal(SourceStatus.NoData, result.Status);
+    }
+
+    private static MarineSource Marine(FakeHttpHandler handler) =>
+        new(handler.CreateClient("https://marine-api.open-meteo.com/"), NullLogger<MarineSource>.Instance);
+
     private static WeatherSource Weather(FakeHttpHandler handler) =>
         new(handler.CreateClient("https://api.open-meteo.com/"), NullLogger<WeatherSource>.Instance);
 

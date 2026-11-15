@@ -43,6 +43,7 @@ public sealed class OpenApiDocumentTests
     [InlineData("sort", "relevance")]
     [InlineData("region", "Fuzzy")]
     [InlineData("hourly.category", "airQuality")]
+    [InlineData("include", "marine")]
     [InlineData("country", "ISO 3166-1")]
     public async Task CityReportParameters_HaveDescriptions(string name, string expectedText)
     {

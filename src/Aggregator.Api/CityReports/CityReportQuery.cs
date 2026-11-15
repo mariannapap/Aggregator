@@ -14,7 +14,7 @@ public sealed class CityReportQuery
     public string City { get; init; } = string.Empty;
 
     [FromQuery(Name = "include")]
-    [Description("Comma-separated sections: weather, airQuality, hourly. Default: weather,airQuality. Only the APIs needed for the requested sections are called.")]
+    [Description("Comma-separated sections: weather, airQuality, marine, hourly. Default: weather,airQuality,marine. Only the APIs needed for the requested sections are called. marine is no_data for places away from the sea. With hourly, rows come from the included sections (all three when include=hourly on its own).")]
     public string? Include { get; init; }
 
     [FromQuery(Name = "region")]
@@ -26,7 +26,7 @@ public sealed class CityReportQuery
     public string? Sort { get; init; }
 
     [FromQuery(Name = "hourly.category")]
-    [Description("weather or airQuality. Default: both. Requires include=hourly; only that API's hourly data is requested.")]
+    [Description("weather, airQuality or marine: narrows hourly rows to one section, which must also be in include (or include=hourly on its own). Requires include=hourly.")]
     public string? HourlyCategory { get; init; }
 
     [FromQuery(Name = "hourly.from")]

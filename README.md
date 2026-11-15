@@ -1,6 +1,6 @@
 # City Report Aggregator
 
-An ASP.NET Core (.NET 10) API that implements the **Gateway Aggregation** pattern over three keyless [Open-Meteo](https://open-meteo.com/) APIs. One request resolves a city to coordinates, then fans out in parallel to the weather and air-quality APIs for every matching place, and returns one composite response.
+An ASP.NET Core (.NET 10) API that implements the **Gateway Aggregation** pattern over four keyless [Open-Meteo](https://open-meteo.com/) APIs. One request resolves a city to coordinates, then fans out **in parallel to the weather, air-quality and marine APIs** for every matching place, and returns one composite response.
 
 ```
 GET /city-report/{country}/{city}
@@ -8,8 +8,9 @@ GET /city-report/{country}/{city}
           ▼
    Geocoding API ──► places (settlements + airports in that country)
           │
-          ├──► Weather API      (per place, in parallel)
-          └──► Air Quality API  (per place, in parallel)
+          ├──► Weather API      ┐
+          ├──► Air Quality API  ├ per place, all in parallel
+          └──► Marine API       ┘
           │
           ▼
    one response: filters + places[] with per-source status
@@ -52,7 +53,7 @@ curl -H "Authorization: Bearer $TOKEN" "http://localhost:8080/city-report/GR/Ath
 docker build --target test .
 ```
 
-Runs 75 unit tests and 11 integration tests; the build fails if any test fails. No network access is needed: external APIs are replaced by fake HTTP handlers and recorded responses.
+Runs all unit and integration tests; the build fails if any test fails. No network access is needed: external APIs are replaced by fake HTTP handlers and recorded responses.
 
 ## Endpoints
 
@@ -62,10 +63,10 @@ Runs 75 unit tests and 11 integration tests; the build fails if any test fails. 
 |---|---|---|---|
 | `country` | path | ISO 3166-1 alpha-2 (e.g. `GR`) | required |
 | `city` | path | city or airport name, 1–100 characters | required |
-| `include` | query | comma-separated: `weather`, `airQuality`, `hourly` | `weather,airQuality` |
+| `include` | query | comma-separated: `weather`, `airQuality`, `marine`, `hourly`. Only the APIs for the requested sections are called; hourly rows come from the included sections (all three with `include=hourly` on its own) | `weather,airQuality,marine` |
 | `region` | query | region name, fuzzy-matched (`krete` → Crete, `attiki` → Attica, `macedonia` → both Macedonias) | none |
 | `sort` | query | `relevance`, `name`, `temperature`; prefix `-` for descending | `relevance` |
-| `hourly.category` | query | `weather` or `airQuality` (requires `include=hourly`) | both |
+| `hourly.category` | query | `weather`, `airQuality` or `marine`: narrows hourly rows to one section, which must also be in `include` (or `include=hourly` alone) | all included |
 | `hourly.from`, `hourly.to` | query | ISO 8601 date-times inside the 24 h window | whole window |
 | `hourly.sort` | query | `time` or `-time` | `time` |
 
@@ -100,6 +101,7 @@ Example: `GET /city-report/GR/Chania?region=crete&sort=-temperature&include=weat
 | `distanceKm` | distance from the Acropolis, Athens: the **relevance** value; nearest first by default |
 | `weather` | current temperature (°C) and wind speed (km/h) |
 | `airQuality.usAqi` | current US AQI (0–500 scale) |
+| `marine` | current wave height (m) and sea surface temperature (°C); `sources.marine` is `no_data` for places away from the sea |
 | `hourly` | one row per metric per hour, for a fixed window of **24 hours starting at the current hour (UTC)** |
 | `sources` | status of each external API used for this place (see below) |
 | `filters` | how the region and hourly filters were applied; a region that matches nothing is **ignored and reported** (`applied: false`) |
@@ -108,7 +110,7 @@ Example: `GET /city-report/GR/Chania?region=crete&sort=-temperature&include=weat
 
 | Status code | When |
 |---|---|
-| `200` | Coordinates were resolved. Weather or air quality may still be `stale`/`unavailable`, as shown in `sources`. |
+| `200` | Coordinates were resolved. Weather, air quality or marine may still be `no_data`/`stale`/`unavailable`, as shown in `sources`. |
 | `400` | Invalid input (validation problem with the failing fields), e.g. `sort=temperature` without `include=weather`. |
 | `401` / `403` | Missing or invalid token / token without the required role. |
 | `404` | No city or airport with that name in that country. |
@@ -160,13 +162,13 @@ public interface IExternalSource<in TQuery, TResult>
 }
 ```
 
-Geocoding, weather and air quality each implement it with their own typed model. Cross-cutting concerns attach to the contract, not to each source:
+Geocoding, weather, air quality and marine each implement it with their own typed model. Cross-cutting concerns attach to the contract, not to each source:
 
 - **Caching:** one open-generic decorator for all sources (`services.Decorate(typeof(IExternalSource<,>), typeof(CachingSource<,>))`).
 - **Resilience:** one standard resilience handler per typed `HttpClient`, configured per API from `appsettings.json`.
 - **Statistics:** a `DelegatingHandler` inside the resilience pipeline measures every attempt.
 
-Adding an API means writing an adapter and a model; caching, resilience, statistics and statuses come with the contract. The orchestrator calls the sources explicitly, so it reads like the dependency graph (geocoding first, then weather and air quality in parallel). Adding a source also adds one property to the response; that trade-off is deliberate, in exchange for precise typed models and OpenAPI schema.
+Adding an API means writing an adapter and a model; caching, resilience, statistics and statuses come with the contract. The orchestrator calls the sources explicitly, so it reads like the dependency graph (geocoding first, then weather, air quality and marine in parallel). Marine was added this way: an endpoint definition on the shared Open-Meteo client, a model, one response property and one orchestrator line. Adding a source also adds one property to the response; that trade-off is deliberate, in exchange for precise typed models and OpenAPI schema.
 
 ### Resilience and fallback
 
@@ -185,6 +187,7 @@ Adding an API means writing an adapter and a model; caching, resilience, statist
 |---|---|---|
 | Geocoding | 24 h | Coordinates don't change; Open-Meteo sends `max-age=86400`. |
 | Current weather | 15 min | The API's current value advances every 15 min. |
+| Current marine | 15 min | Like weather, the current value advances every 15 min. |
 | Current air quality / hourly data | 1 h | Hourly values; forecasts change only with new model runs (6–24 h). |
 
 ### Security
@@ -199,9 +202,9 @@ Each HTTP client has its own full `Resilience` block, even where the values are 
 
 | Section | Settings |
 |---|---|
-| `HttpClients:{Geocoding,Weather,AirQuality}` | `BaseUrl`, `CacheTtl`, `HourlyCacheTtl`, `LastGoodRetention`, `Resilience` (retry, timeouts, circuit breaker, concurrency limiter) |
+| `HttpClients:{Geocoding,Weather,AirQuality,Marine}` | `BaseUrl`, `CacheTtl`, `HourlyCacheTtl`, `LastGoodRetention`, `Resilience` (retry, timeouts, circuit breaker, concurrency limiter) |
 | `Geocoding` | `Count` (100), `Language`, `AllowedFeatureCodes` (settlements `PPL`, `PPLA`–`PPLA4`, `PPLC` and airports `AIRP`) |
-| `CityReport` | `CoordinateDecimals`, `HourlyWindowHours` (24), `MaxCityLength` |
+| `CityReport` | `CoordinateDecimals`, `HourlyWindowHours` (24), `MaxCityLength`, `MaxRegionLength` |
 | `Relevance` | reference point (the Acropolis) |
 | `RegionMatching` | `MaxEditDistanceRatio` (0.3) |
 | `Statistics` | bucket thresholds |
@@ -211,12 +214,12 @@ Each HTTP client has its own full `Resilience` block, even where the values are 
 
 ## Assumptions and decisions
 
-- **"Aggregated data"** is a composite object: each place combines geocoding, weather and air quality, and each nested list has its own filters and sorting.
+- **"Aggregated data"** is a composite object: each place combines geocoding, weather, air quality and marine data, and each nested list has its own filters and sorting.
 - **Filtering and sorting (R5):** date (`hourly.from`/`to`, `hourly.sort`), relevance (distance from the Acropolis), category (`hourly.category`), plus region and temperature.
 - **Ambiguous names:** all matches in the country are returned (settlements and airports only), nearest first. `country` is mandatory.
-- **Hourly data** covers a fixed 24 h window from the current hour (UTC), so responses stay bounded and both APIs always cover it.
+- **Hourly data** covers a fixed 24 h window from the current hour (UTC), so responses stay bounded and every API always covers it.
 - **Provider limits never become our API contract:** an adapter that receives less than requested reports `partial` or `no_data` instead.
-- All three APIs come from one provider (Open-Meteo); they are separate APIs on separate hosts with separate rate limits.
+- All four APIs come from one provider (Open-Meteo); they are separate APIs on separate hosts with separate rate limits.
 
 ## Possible extensions
 

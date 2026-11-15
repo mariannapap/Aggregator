@@ -9,6 +9,7 @@ public sealed class CityReportService(
     IExternalSource<GeocodingQuery, IReadOnlyList<Place>> geocoding,
     IExternalSource<LocationQuery, Weather> weather,
     IExternalSource<LocationQuery, AirQuality> airQuality,
+    IExternalSource<LocationQuery, Marine> marine,
     RegionMatcher regionMatcher,
     RelevanceCalculator relevance,
     TimeProvider timeProvider,
@@ -56,24 +57,30 @@ public sealed class CityReportService(
         HourlyRange? hourlyRange,
         CancellationToken cancellationToken)
     {
-        var weatherQuery = CreateQuery(place, request, ReportSections.Weather, HourlyCategory.Weather, window);
-        var airQualityQuery = CreateQuery(place, request, ReportSections.AirQuality, HourlyCategory.AirQuality, window);
-
-        var weatherTask = weatherQuery is null ? Task.FromResult<SourceResult<Weather>?>(null) : FetchAsync(weather, weatherQuery, cancellationToken);
-        var airQualityTask = airQualityQuery is null ? Task.FromResult<SourceResult<AirQuality>?>(null) : FetchAsync(airQuality, airQualityQuery, cancellationToken);
-        await Task.WhenAll(weatherTask, airQualityTask);
+        var weatherTask = FetchAsync(weather, CreateQuery(place, request, ReportSections.Weather, HourlyCategory.Weather, window), cancellationToken);
+        var airQualityTask = FetchAsync(airQuality, CreateQuery(place, request, ReportSections.AirQuality, HourlyCategory.AirQuality, window), cancellationToken);
+        var marineTask = FetchAsync(marine, CreateQuery(place, request, ReportSections.Marine, HourlyCategory.Marine, window), cancellationToken);
+        await Task.WhenAll(weatherTask, airQualityTask, marineTask);
 
         var weatherResult = await weatherTask;
         var airQualityResult = await airQualityTask;
+        var marineResult = await marineTask;
 
         var hourly = hourlyRange is null
             ? null
             : HourlyFilter.Apply(
-                (weatherResult?.Value?.Hourly ?? []).Concat(airQualityResult?.Value?.Hourly ?? []),
+                [.. weatherResult?.Value?.Hourly ?? [], .. airQualityResult?.Value?.Hourly ?? [], .. marineResult?.Value?.Hourly ?? []],
                 hourlyRange,
                 request.Hourly.SortDescending);
 
-        return new PlaceReport(place, relevance.DistanceKm(place.Coordinates), geocodingStatus, weatherResult, airQualityResult, hourly);
+        return new PlaceReport(
+            place,
+            relevance.DistanceKm(place.Coordinates),
+            geocodingStatus,
+            weatherResult,
+            airQualityResult,
+            marineResult,
+            hourly);
     }
 
     private LocationQuery? CreateQuery(
@@ -84,7 +91,9 @@ public sealed class CityReportService(
         HourlyWindow? window)
     {
         var includeCurrent = request.Sections.HasFlag(currentSection);
-        var includeHourly = window is not null && (request.Hourly.Category is null || request.Hourly.Category == category);
+        var includeHourly = window is not null && (request.Hourly.Category is { } selected
+            ? selected == category
+            : request.Sections.IncludesHourlyFor(category));
         if (!includeCurrent && !includeHourly)
             return null;
 
@@ -93,8 +102,8 @@ public sealed class CityReportService(
 
     private static async Task<SourceResult<TResult>?> FetchAsync<TResult>(
         IExternalSource<LocationQuery, TResult> source,
-        LocationQuery query,
+        LocationQuery? query,
         CancellationToken cancellationToken)
         where TResult : class =>
-        await source.FetchAsync(query, cancellationToken);
+        query is null ? null : await source.FetchAsync(query, cancellationToken);
 }

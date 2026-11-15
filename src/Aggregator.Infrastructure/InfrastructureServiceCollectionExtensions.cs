@@ -28,6 +28,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSource<GeocodingQuery, IReadOnlyList<Place>, GeocodingSource>(configuration, SourceNames.Geocoding);
         services.AddSource<LocationQuery, Weather, WeatherSource>(configuration, SourceNames.Weather);
         services.AddSource<LocationQuery, AirQuality, AirQualitySource>(configuration, SourceNames.AirQuality);
+        services.AddSource<LocationQuery, Marine, MarineSource>(configuration, SourceNames.Marine);
 
         services.Decorate(typeof(IExternalSource<,>), typeof(CachingSource<,>));
         return services;

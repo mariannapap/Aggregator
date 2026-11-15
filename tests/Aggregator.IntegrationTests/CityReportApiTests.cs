@@ -7,6 +7,8 @@ namespace Aggregator.IntegrationTests;
 
 public sealed class CityReportApiTests
 {
+    private static readonly string[] LocationSources = ["weather", "airQuality", "marine"];
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -48,7 +50,7 @@ public sealed class CityReportApiTests
         await using var factory = new AggregatorApiFactory();
         var client = await AuthorizedClient(factory, "valid");
 
-        var body = await GetJson(client, "/city-report/GR/Athens?include=weather,airQuality,hourly");
+        var body = await GetJson(client, "/city-report/GR/Athens?include=weather,airQuality,marine,hourly");
 
         var places = body.GetProperty("places");
         Assert.Equal(2, places.GetArrayLength());
@@ -56,25 +58,89 @@ public sealed class CityReportApiTests
         Assert.Equal("Athens", athens.GetProperty("city").GetString());
         Assert.True(athens.GetProperty("weather").GetProperty("temperature").ValueKind == JsonValueKind.Number);
         Assert.True(athens.GetProperty("airQuality").GetProperty("usAqi").ValueKind == JsonValueKind.Number);
-        Assert.Equal(72, athens.GetProperty("hourly").GetArrayLength());
-        Assert.Equal("ok", athens.GetProperty("sources").GetProperty("geocoding").GetString());
-        Assert.Equal("ok", athens.GetProperty("sources").GetProperty("weather").GetString());
-        Assert.Equal("ok", athens.GetProperty("sources").GetProperty("airQuality").GetString());
+        Assert.True(athens.GetProperty("marine").GetProperty("waveHeight").ValueKind == JsonValueKind.Number);
+        Assert.Equal(24 * 5, athens.GetProperty("hourly").GetArrayLength());
+        foreach (var source in LocationSources.Prepend("geocoding"))
+            Assert.Equal("ok", athens.GetProperty("sources").GetProperty(source).GetString());
     }
 
     [Fact]
-    public async Task CityReport_OneSourceDown_Returns200WithItsStatus()
+    public async Task CityReport_HourlyFollowsInclude_OnlyIncludedSectionsProduceRows()
     {
         await using var factory = new AggregatorApiFactory();
-        factory.OpenMeteo.AirQualityDown = true;
+        var client = await AuthorizedClient(factory, "valid");
+
+        var athens = (await GetJson(client, "/city-report/GR/Athens?include=weather,airQuality,hourly")).GetProperty("places")[0];
+
+        Assert.Equal(24 * 3, athens.GetProperty("hourly").GetArrayLength());
+        Assert.DoesNotContain(athens.GetProperty("hourly").EnumerateArray(), row => row.GetProperty("category").GetString() == "marine");
+        Assert.False(athens.GetProperty("sources").TryGetProperty("marine", out _));
+    }
+
+    [Fact]
+    public async Task CityReport_WithMarine_AggregatesThreeLocationApisPerPlace()
+    {
+        await using var factory = new AggregatorApiFactory();
+        var client = await AuthorizedClient(factory, "valid");
+
+        var body = await GetJson(client, "/city-report/GR/Athens?include=weather,airQuality,marine,hourly&hourly.category=marine");
+
+        var athens = body.GetProperty("places")[0];
+        Assert.Equal(0.1, athens.GetProperty("marine").GetProperty("waveHeight").GetDouble());
+        Assert.Equal(20.5, athens.GetProperty("marine").GetProperty("seaSurfaceTemperature").GetDouble());
+        Assert.Equal("ok", athens.GetProperty("sources").GetProperty("marine").GetString());
+        Assert.Equal(48, athens.GetProperty("hourly").GetArrayLength());
+        Assert.All(athens.GetProperty("hourly").EnumerateArray(), row => Assert.Equal("marine", row.GetProperty("category").GetString()));
+    }
+
+    [Fact]
+    public async Task CityReport_DefaultInclude_CallsWeatherAirQualityAndMarine()
+    {
+        await using var factory = new AggregatorApiFactory();
+        var client = await AuthorizedClient(factory, "valid");
+
+        var athens = (await GetJson(client, "/city-report/GR/Athens")).GetProperty("places")[0];
+
+        Assert.True(athens.TryGetProperty("weather", out _));
+        Assert.True(athens.TryGetProperty("airQuality", out _));
+        Assert.True(athens.TryGetProperty("marine", out _));
+        Assert.False(athens.TryGetProperty("hourly", out _));
+    }
+
+    [Fact]
+    public async Task CityReport_HourlyCategoryNotIncluded_Returns400()
+    {
+        await using var factory = new AggregatorApiFactory();
+        var client = await AuthorizedClient(factory, "valid");
+
+        var response = await client.GetAsync(new Uri("/city-report/GR/Athens?include=weather,hourly&hourly.category=marine", UriKind.Relative), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        Assert.True(problem.GetProperty("errors").TryGetProperty("hourly.category", out _));
+    }
+
+    [Theory]
+    [InlineData("airQuality")]
+    [InlineData("marine")]
+    public async Task CityReport_OneSourceDown_Returns200WithItsStatusAndOthersIntact(string down)
+    {
+        await using var factory = new AggregatorApiFactory();
+        factory.OpenMeteo.AirQualityDown = down == "airQuality";
+        factory.OpenMeteo.MarineDown = down == "marine";
         var client = await AuthorizedClient(factory, "valid");
 
         var body = await GetJson(client, "/city-report/GR/Athens");
 
         var athens = body.GetProperty("places")[0];
-        Assert.Equal("unavailable", athens.GetProperty("sources").GetProperty("airQuality").GetString());
-        Assert.Equal("ok", athens.GetProperty("sources").GetProperty("weather").GetString());
-        Assert.False(athens.TryGetProperty("airQuality", out _));
+        var sources = athens.GetProperty("sources");
+        Assert.Equal("unavailable", sources.GetProperty(down).GetString());
+        Assert.False(athens.TryGetProperty(down, out _));
+        foreach (var source in LocationSources.Where(source => source != down))
+        {
+            Assert.Equal("ok", sources.GetProperty(source).GetString());
+            Assert.True(athens.TryGetProperty(source, out _));
+        }
     }
 
     [Fact]
@@ -143,6 +209,7 @@ public sealed class CityReportApiTests
         Assert.Equal(1, apis.GetProperty("geocoding").GetProperty("totalRequests").GetInt64());
         Assert.Equal(2, apis.GetProperty("weather").GetProperty("totalRequests").GetInt64());
         Assert.Equal(2, apis.GetProperty("airQuality").GetProperty("totalRequests").GetInt64());
+        Assert.Equal(2, apis.GetProperty("marine").GetProperty("totalRequests").GetInt64());
         Assert.Equal(100, stats.GetProperty("thresholds").GetProperty("fastBelowMs").GetInt32());
     }
 

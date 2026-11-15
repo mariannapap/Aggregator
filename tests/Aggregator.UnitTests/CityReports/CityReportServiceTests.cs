@@ -17,6 +17,7 @@ public sealed class CityReportServiceTests
     private readonly FakeSource<GeocodingQuery, IReadOnlyList<Place>> geocoding = new(SourceNames.Geocoding);
     private readonly FakeSource<LocationQuery, Weather> weather = new(SourceNames.Weather);
     private readonly FakeSource<LocationQuery, AirQuality> airQuality = new(SourceNames.AirQuality);
+    private readonly FakeSource<LocationQuery, Marine> marine = new(SourceNames.Marine);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -47,6 +48,7 @@ public sealed class CityReportServiceTests
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]).AsStale();
         weather.Respond = _ => SourceResult.Ok(new Weather(new CurrentWeather(18, 5), []));
         airQuality.Respond = _ => SourceResult.Unavailable<AirQuality>();
+        marine.Respond = _ => SourceResult.Ok(new Marine(new CurrentMarine(0.1, 20.5), []));
 
         var report = Found(await CreateService().GetAsync(Request(), Ct));
 
@@ -54,35 +56,106 @@ public sealed class CityReportServiceTests
         Assert.Equal(SourceStatus.Stale, place.GeocodingStatus);
         Assert.Equal(SourceStatus.Ok, place.Weather!.Status);
         Assert.Equal(SourceStatus.Unavailable, place.AirQuality!.Status);
+        Assert.Equal(SourceStatus.Ok, place.Marine!.Status);
     }
 
     [Fact]
-    public async Task GetAsync_DefaultRequest_CallsWeatherAndAirQualityPerPlaceWithoutHourly()
+    public async Task GetAsync_DefaultRequest_CallsEveryLocationSourcePerPlaceWithoutHourly()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens, Airport]);
 
         await CreateService().GetAsync(Request(), Ct);
 
-        Assert.Equal(2, weather.Queries.Count);
-        Assert.Equal(2, airQuality.Queries.Count);
-        Assert.All(weather.Queries, query => Assert.True(query.IncludesCurrent && !query.IncludesHourly));
+        Assert.Equal((2, 2, 2), (weather.Queries.Count, airQuality.Queries.Count, marine.Queries.Count));
+        Assert.All(
+            [.. weather.Queries, .. airQuality.Queries, .. marine.Queries],
+            query => Assert.True(query.IncludesCurrent && !query.IncludesHourly));
     }
 
     [Fact]
-    public async Task GetAsync_HourlyAirQualityOnly_CallsWeatherForCurrentAndAirQualityForHourly()
+    public async Task GetAsync_Marine_MapsCurrentValuesPerPlace()
+    {
+        geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens, Airport]);
+        marine.Respond = _ => SourceResult.Ok(new Marine(new CurrentMarine(0.1, 20.5), []));
+
+        var report = Found(await CreateService().GetAsync(Request(ReportSections.Marine), Ct));
+
+        Assert.Empty(weather.Queries);
+        Assert.Empty(airQuality.Queries);
+        Assert.All(report.Places, place => Assert.Equal(new CurrentMarine(0.1, 20.5), place.Marine!.Value!.Current));
+    }
+
+    [Fact]
+    public async Task GetAsync_MarineNoDataInland_KeepsOtherSectionsAndReportsNoData()
+    {
+        geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
+        weather.Respond = _ => SourceResult.Ok(new Weather(new CurrentWeather(18, 5), []));
+        marine.Respond = _ => SourceResult.NoData<Marine>();
+
+        var place = Assert.Single(Found(await CreateService().GetAsync(Request(ReportSections.Weather | ReportSections.Marine), Ct)).Places);
+
+        Assert.Equal(SourceStatus.Ok, place.Weather!.Status);
+        Assert.Equal(SourceStatus.NoData, place.Marine!.Status);
+    }
+
+    [Fact]
+    public async Task GetAsync_HourlyMarineOnly_CallsOnlyMarineForHourlyRows()
+    {
+        geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
+        var start = new DateTimeOffset(2026, 11, 15, 15, 0, 0, TimeSpan.Zero);
+        marine.Respond = _ => SourceResult.Ok(new Marine(null, [new HourlyReading(start, HourlyCategory.Marine, "waveHeight", 0.1, "m")]));
+
+        var report = Found(await CreateService().GetAsync(
+            Request(ReportSections.Hourly, hourly: HourlyOptions.Default with { Category = HourlyCategory.Marine }),
+            Ct));
+
+        Assert.Empty(weather.Queries);
+        Assert.Empty(airQuality.Queries);
+        var marineQuery = Assert.Single(marine.Queries);
+        Assert.False(marineQuery.IncludesCurrent);
+        Assert.Equal(HourlyCategory.Marine, Assert.Single(Assert.Single(report.Places).Hourly!).Category);
+    }
+
+    [Fact]
+    public async Task GetAsync_HourlyCategory_RestrictsHourlyRowsToThatSection()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
 
         await CreateService().GetAsync(
-            Request(ReportSections.Weather | ReportSections.Hourly, hourly: HourlyOptions.Default with { Category = HourlyCategory.AirQuality }),
+            Request(ReportSections.Weather | ReportSections.AirQuality | ReportSections.Hourly, hourly: HourlyOptions.Default with { Category = HourlyCategory.AirQuality }),
             Ct);
 
         var weatherQuery = Assert.Single(weather.Queries);
         Assert.True(weatherQuery.IncludesCurrent);
         Assert.False(weatherQuery.IncludesHourly);
         var airQualityQuery = Assert.Single(airQuality.Queries);
-        Assert.False(airQualityQuery.IncludesCurrent);
+        Assert.True(airQualityQuery.IncludesCurrent);
         Assert.Equal(new DateTimeOffset(2026, 11, 15, 15, 0, 0, TimeSpan.Zero), airQualityQuery.Hourly!.Start);
+        Assert.Empty(marine.Queries);
+    }
+
+    [Fact]
+    public async Task GetAsync_HourlyWithSections_FetchesHourlyOnlyForIncludedSections()
+    {
+        geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
+
+        await CreateService().GetAsync(Request(ReportSections.Weather | ReportSections.AirQuality | ReportSections.Hourly), Ct);
+
+        Assert.True(Assert.Single(weather.Queries).IncludesHourly);
+        Assert.True(Assert.Single(airQuality.Queries).IncludesHourly);
+        Assert.Empty(marine.Queries);
+    }
+
+    [Fact]
+    public async Task GetAsync_HourlyOnly_FetchesHourlyFromEverySection()
+    {
+        geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens]);
+
+        await CreateService().GetAsync(Request(ReportSections.Hourly), Ct);
+
+        Assert.All(
+            [Assert.Single(weather.Queries), Assert.Single(airQuality.Queries), Assert.Single(marine.Queries)],
+            query => Assert.True(!query.IncludesCurrent && query.IncludesHourly));
     }
 
     [Fact]
@@ -154,14 +227,19 @@ public sealed class CityReportServiceTests
             [.. Enumerable.Range(0, 24).Select(hour => new HourlyReading(start.AddHours(hour), HourlyCategory.Weather, "temperature", hour, "°C"))]));
         airQuality.Respond = _ => SourceResult.Ok(new AirQuality(null,
             [.. Enumerable.Range(0, 24).Select(hour => new HourlyReading(start.AddHours(hour), HourlyCategory.AirQuality, "usAqi", 50, "USAQI"))]));
+        marine.Respond = _ => SourceResult.Ok(new Marine(null,
+            [.. Enumerable.Range(0, 24).Select(hour => new HourlyReading(start.AddHours(hour), HourlyCategory.Marine, "waveHeight", 0.2, "m"))]));
 
         var hourly = HourlyOptions.Default with { From = start.AddHours(2), To = start.AddHours(3), SortDescending = true };
         var report = Found(await CreateService().GetAsync(Request(ReportSections.Hourly, hourly: hourly), Ct));
 
         var rows = Assert.Single(report.Places).Hourly!;
-        Assert.Equal(4, rows.Count);
+        Assert.Equal(6, rows.Count);
         Assert.Equal(start.AddHours(3), rows[0].Time);
         Assert.Equal(start.AddHours(2), rows[^1].Time);
+        Assert.Equal(
+            [HourlyCategory.Weather, HourlyCategory.AirQuality, HourlyCategory.Marine],
+            rows.Take(3).Select(row => row.Category));
         Assert.False(report.Filters.HourlyRange!.Clamped);
     }
 
@@ -182,7 +260,7 @@ public sealed class CityReportServiceTests
     private static CityReport Found(CityReportOutcome outcome) => Assert.IsType<CityReportOutcome.Found>(outcome).Report;
 
     private static CityReportRequest Request(
-        ReportSections sections = ReportSections.Weather | ReportSections.AirQuality,
+        ReportSections sections = ReportSectionsExtensions.DataSections,
         string? region = null,
         PlaceSort? sort = null,
         HourlyOptions? hourly = null) =>
@@ -193,6 +271,7 @@ public sealed class CityReportServiceTests
             geocoding,
             weather,
             airQuality,
+            marine,
             new RegionMatcher(Options.Create(new RegionMatchingOptions())),
             new RelevanceCalculator(Options.Create(new RelevanceOptions { ReferenceLatitude = 37.9715, ReferenceLongitude = 23.7257 })),
             new FakeTimeProvider(Now),

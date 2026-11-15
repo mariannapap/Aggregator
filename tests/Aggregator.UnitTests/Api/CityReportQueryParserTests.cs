@@ -11,14 +11,14 @@ public sealed class CityReportQueryParserTests
         new(Options.Create(new CityReportOptions { MaxCityLength = 100, MaxRegionLength = 20 }));
 
     [Fact]
-    public void Parse_Defaults_IncludeWeatherAndAirQualitySortedByRelevance()
+    public void Parse_Defaults_IncludeEveryDataSectionSortedByRelevance()
     {
         var result = parser.Parse(new CityReportQuery { Country = "gr", City = " Athens " });
 
         Assert.True(result.IsValid);
         Assert.Empty(result.Errors);
         Assert.Equal(("Athens", "GR"), (result.Request.City, result.Request.Country));
-        Assert.Equal(ReportSections.Weather | ReportSections.AirQuality, result.Request.Sections);
+        Assert.Equal(ReportSections.Weather | ReportSections.AirQuality | ReportSections.Marine, result.Request.Sections);
         Assert.Equal(PlaceSort.Default, result.Request.Sort);
     }
 
@@ -29,10 +29,10 @@ public sealed class CityReportQueryParserTests
         {
             Country = "GR",
             City = "Chania",
-            Include = "Weather, HOURLY",
+            Include = "Weather, MARINE, HOURLY",
             Region = "crete",
             Sort = "-Temperature",
-            HourlyCategory = "airquality",
+            HourlyCategory = "Marine",
             HourlyFrom = "2026-11-15T18:00Z",
             HourlyTo = "2026-11-15T20:00Z",
             HourlySort = "-time"
@@ -40,10 +40,10 @@ public sealed class CityReportQueryParserTests
 
         Assert.True(result.IsValid);
         var request = result.Request;
-        Assert.Equal(ReportSections.Weather | ReportSections.Hourly, request.Sections);
+        Assert.Equal(ReportSections.Weather | ReportSections.Marine | ReportSections.Hourly, request.Sections);
         Assert.Equal("crete", request.Region);
         Assert.Equal(new PlaceSort(PlaceSortField.Temperature, true), request.Sort);
-        Assert.Equal(HourlyCategory.AirQuality, request.Hourly.Category);
+        Assert.Equal(HourlyCategory.Marine, request.Hourly.Category);
         Assert.Equal(new DateTimeOffset(2026, 11, 15, 18, 0, 0, TimeSpan.Zero), request.Hourly.From);
         Assert.True(request.Hourly.SortDescending);
     }
@@ -89,6 +89,21 @@ public sealed class CityReportQueryParserTests
         });
 
         Assert.Contains(field, result.Errors.Keys);
+    }
+
+    [Theory]
+    [InlineData("weather,hourly", "airQuality", false)]
+    [InlineData("weather,airQuality,hourly", "marine", false)]
+    [InlineData("weather,airQuality,hourly", "airQuality", true)]
+    [InlineData("hourly", "marine", true)]
+    [InlineData("hourly", "weather", true)]
+    public void Parse_HourlyCategory_MustBeAnIncludedSectionUnlessHourlyIsOnItsOwn(string include, string category, bool valid)
+    {
+        var result = parser.Parse(new CityReportQuery { Country = "GR", City = "Athens", Include = include, HourlyCategory = category });
+
+        Assert.Equal(valid, result.IsValid);
+        if (!valid)
+            Assert.Contains("requires that section in include", Assert.Single(result.Errors["hourly.category"]), StringComparison.Ordinal);
     }
 
     [Fact]
