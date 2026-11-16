@@ -3,6 +3,7 @@ using Aggregator.Infrastructure.Caching;
 using Microsoft.Extensions.Caching.Hybrid;
 using Aggregator.UnitTests.Support;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Caching;
@@ -19,7 +20,7 @@ public sealed class StaleAwareCacheTests : IDisposable
     public StaleAwareCacheTests()
     {
         provider = FakeClockCache.Create(time);
-        cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>());
+        cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

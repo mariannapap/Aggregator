@@ -1,13 +1,13 @@
 # Test report
 
-Generated 2026-11-16 16:51 UTC from the xUnit results of the Docker `test-report` stage.
+Generated 2026-11-16 17:58 UTC from the xUnit results of the Docker `test-report` stage.
 
-**283 tests · 283 passed · 0 failed · 0 skipped · 10.8 s** ✅
+**288 tests · 288 passed · 0 failed · 0 skipped · 8.3 s** ✅
 
 | Test project | Tests | Passed | Failed | Time |
 |---|---|---|---|---|
-| Aggregator.UnitTests | 213 | 213 | 0 | 1.3 s |
-| Aggregator.IntegrationTests | 70 | 70 | 0 | 9.5 s |
+| Aggregator.UnitTests | 216 | 216 | 0 | 0.8 s |
+| Aggregator.IntegrationTests | 72 | 72 | 0 | 7.5 s |
 
 Each test is tagged with the requirement(s) it proves and whether it emulates a success or a failure scenario. A test with several data rows (a theory) counts as one scenario.
 
@@ -17,15 +17,15 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 | Requirement | | Success scenarios | Failure scenarios | Result |
 |---|---|---|---|---|
-| **R1** | .NET service using ASP.NET Core | 0 | 0 | every integration test hosts the ASP.NET Core app (70 tests) |
+| **R1** | .NET service using ASP.NET Core | 0 | 0 | every integration test hosts the ASP.NET Core app (72 tests) |
 | **R2** | Architecture that makes integrating new APIs easy | 11 | 16 | ✅ |
 | **R3** | Data from at least three external APIs, simultaneously | 2 | 0 | ✅ |
 | **R4** | Endpoint returning the aggregated data | 6 | 2 | ✅ |
 | **R5** | Filtering and sorting (date, relevance, category) | 47 | 18 | ✅ |
-| **R6** | Error handling, transient failures, fallback | 2 | 72 | ✅ |
+| **R6** | Error handling, transient failures, fallback | 2 | 77 | ✅ |
 | **R7** | Unit tests | 0 | 0 | this report |
 | **R8** | Documentation | 7 | 0 | ✅ |
-| **R9** | Caching | 25 | 18 | ✅ |
+| **R9** | Caching | 25 | 22 | ✅ |
 | **R10** | Parallelism | 3 | 1 | ✅ |
 | **R11** | Request statistics with performance buckets | 13 | 5 | ✅ |
 | **O1** | JWT bearer authentication | 10 | 9 | ✅ |
@@ -178,6 +178,8 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Transient failure then success → is retried and reported ok | failure | ✅ | `ResilienceTests` |
 | Answer without usable values → is no data → and the other sources are unaffected | failure | ✅ | `SourceStatusApiTests` |
 | Incomplete current values → are partial → and the hourly rows are kept | failure | ✅ | `SourceStatusApiTests` |
+| Malformed value after expiry → serves the last good value as stale | failure | ✅ | `SourceStatusApiTests` |
+| Malformed value from one source → degrades only that source | failure | ✅ | `SourceStatusApiTests` |
 | Upstream bad request → is called once without retry → and reported as no data | failure | ✅ | `SourceStatusApiTests` |
 | Invalid configuration → stops the app at startup (5 cases) | failure | ✅ | `StartupTests` |
 | Server errors → count as failed → but an upstream 400 does not | failure | ✅ | `StatisticsApiTests` |
@@ -196,13 +198,16 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Full weather graph → survives the last good path through the shared store | failure | ✅ | `CacheRoundTripTests` |
 | Serving stale → does not extend the last good retention | failure | ✅ | `CacheRoundTripTests` |
 | Caller cancels during the fetch → cancellation propagates and nothing is cached | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Caller cancels while the source throws → cancellation still propagates | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Expected unavailability → is not logged as an error | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Last good past its retention → is not served | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Partial result → is kept as last good and served stale with its data | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Source recovers → fresh value replaces stale and becomes the new last good | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Stampede → one waiting caller cancels → the others still get the value | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Stampede → while the source fails with history → one upstream call and every caller gets stale | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Stampede → while the source fails → one upstream call and every caller gets unavailable | failure | ✅ | `StaleAwareCacheFailureTests` |
-| Unexpected exception in the source → propagates instead of being hidden as stale | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Unexpected exception in the source → serves the last good value and logs an error | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Unexpected exception without history → is unavailable and not cached | failure | ✅ | `StaleAwareCacheFailureTests` |
 | While serving stale → every request still tries the source | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Get → failure after expired no data → returns unavailable not stale | failure | ✅ | `StaleAwareCacheTests` |
 | Get → failure after expiry → serves last good as stale | failure | ✅ | `StaleAwareCacheTests` |
@@ -277,16 +282,20 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Simultaneous identical requests while an api is down → do not flood it | failure | ✅ | `CacheStampedeTests` |
 | Geocoding down with cached coordinates → returns 200 with geocoding stale | failure | ✅ | `ResilienceTests` |
 | Source down after expiry → serves last good value as stale | failure | ✅ | `ResilienceTests` |
+| Malformed value after expiry → serves the last good value as stale | failure | ✅ | `SourceStatusApiTests` |
 | Full weather graph → survives the last good path through the shared store | failure | ✅ | `CacheRoundTripTests` |
 | Serving stale → does not extend the last good retention | failure | ✅ | `CacheRoundTripTests` |
 | Caller cancels during the fetch → cancellation propagates and nothing is cached | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Caller cancels while the source throws → cancellation still propagates | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Expected unavailability → is not logged as an error | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Last good past its retention → is not served | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Partial result → is kept as last good and served stale with its data | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Source recovers → fresh value replaces stale and becomes the new last good | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Stampede → one waiting caller cancels → the others still get the value | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Stampede → while the source fails with history → one upstream call and every caller gets stale | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Stampede → while the source fails → one upstream call and every caller gets unavailable | failure | ✅ | `StaleAwareCacheFailureTests` |
-| Unexpected exception in the source → propagates instead of being hidden as stale | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Unexpected exception in the source → serves the last good value and logs an error | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Unexpected exception without history → is unavailable and not cached | failure | ✅ | `StaleAwareCacheFailureTests` |
 | While serving stale → every request still tries the source | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Get → failure after expired no data → returns unavailable not stale | failure | ✅ | `StaleAwareCacheTests` |
 | Get → failure after expiry → serves last good as stale | failure | ✅ | `StaleAwareCacheTests` |
@@ -373,19 +382,19 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 |||
 |:---|:---|
-| Generated on: | 11/16/2026 - 16:51:30 |
+| Generated on: | 11/16/2026 - 17:58:25 |
 | Parser: | MultiReport (2x Cobertura) |
 | Assemblies: | 3 |
-| Classes: | 123 |
+| Classes: | 124 |
 | Files: | 108 |
-| **Line coverage:** | 91.1% (1727 of 1895) |
-| Covered lines: | 1727 |
+| **Line coverage:** | 91.2% (1753 of 1921) |
+| Covered lines: | 1753 |
 | Uncovered lines: | 168 |
-| Coverable lines: | 1895 |
-| Total lines: | 3255 |
-| **Branch coverage:** | 78.7% (793 of 1007) |
-| Covered branches: | 793 |
-| Total branches: | 1007 |
+| Coverable lines: | 1921 |
+| Total lines: | 3130 |
+| **Branch coverage:** | 78.8% (800 of 1015) |
+| Covered branches: | 800 |
+| Total branches: | 1015 |
 
 </details>
 
@@ -499,13 +508,14 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |**Name**|**Line**|**Branch**|
 |:---|---:|---:|
 |**Aggregator.Infrastructure**|**99.4%**|**86.4%**|
+|Aggregator.Infrastructure.Caching.CachingLog|100%|75%|
 |Aggregator.Infrastructure.Caching.CachingSource<TQuery, TResult>|100%||
 |Aggregator.Infrastructure.Caching.CachingSource<TQuery, TResult>|100%||
 |Aggregator.Infrastructure.Caching.GeocodingCachePolicy|100%||
 |Aggregator.Infrastructure.Caching.LocationCachePolicy|100%|87.5%|
 |Aggregator.Infrastructure.Caching.SourceUnavailableException|100%||
-|Aggregator.Infrastructure.Caching.StaleAwareCache|96.6%|100%|
-|Aggregator.Infrastructure.Caching.StaleAwareCache<T>|96.6%|100%|
+|Aggregator.Infrastructure.Caching.StaleAwareCache|96.8%|100%|
+|Aggregator.Infrastructure.Caching.StaleAwareCache<T>|96.8%|100%|
 |Aggregator.Infrastructure.Http.ExternalApiMetrics|100%||
 |Aggregator.Infrastructure.Http.StatisticsHandler|100%|100%|
 |Aggregator.Infrastructure.InfrastructureServiceCollectionExtensions|100%||

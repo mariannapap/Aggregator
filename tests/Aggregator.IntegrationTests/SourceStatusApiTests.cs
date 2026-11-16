@@ -8,6 +8,10 @@ public sealed class SourceStatusApiTests
 {
     private const string Report = "/city-report/GR/Anywhere";
 
+    // Valid JSON, but the hourly time is not in Open-Meteo's yyyy-MM-ddTHH:mm format.
+    private const string MalformedWeather =
+        """{"current":{"temperature_2m":1,"wind_speed_10m":2},"hourly":{"time":["2026-11-15 15:00"],"temperature_2m":[1],"wind_speed_10m":[2]}}""";
+
     [Fact]
     [FailureScenario]
     public async Task IncompleteCurrentValues_ArePartial_AndTheHourlyRowsAreKept()
@@ -53,6 +57,41 @@ public sealed class SourceStatusApiTests
 
         Assert.Equal("no_data", place.SourceStatus("marine"));
         Assert.Equal(1, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Marine));
+    }
+
+    [Fact]
+    [FailureScenario]
+    public async Task MalformedValueFromOneSource_DegradesOnlyThatSource()
+    {
+        await using var factory = new AggregatorApiFactory();
+        factory.OpenMeteo.GeneratedPlaces = 1;
+        factory.OpenMeteo.ScriptJson(OpenMeteoHosts.Weather, MalformedWeather);
+        var client = await factory.CreateAuthorizedClientAsync();
+
+        var place = (await client.GetJsonAsync($"{Report}?include=weather,airQuality,hourly")).GetProperty("places")[0];
+
+        Assert.Equal("unavailable", place.SourceStatus("weather"));
+        Assert.Equal("ok", place.SourceStatus("airQuality"));
+    }
+
+    [Fact]
+    [Requirement("R9"), FailureScenario]
+    public async Task MalformedValueAfterExpiry_ServesTheLastGoodValueAsStale()
+    {
+        await using var factory = new AggregatorApiFactory();
+        factory.OpenMeteo.GeneratedPlaces = 1;
+        var client = await factory.WithSettings(("HttpClients:Weather:CacheTtl", "00:00:01")).CreateAuthorizedClientAsync();
+        const string request = $"{Report}?include=weather,airQuality,hourly";
+
+        var fresh = (await client.GetJsonAsync(request)).GetProperty("places")[0];
+        factory.OpenMeteo.ScriptJson(OpenMeteoHosts.Weather, MalformedWeather);
+        await Task.Delay(TimeSpan.FromMilliseconds(1500), TestContext.Current.CancellationToken);
+        var degraded = (await client.GetJsonAsync(request)).GetProperty("places")[0];
+
+        Assert.Equal("ok", fresh.SourceStatus("weather"));
+        Assert.Equal("stale", degraded.SourceStatus("weather"));
+        Assert.Equal(fresh.GetProperty("weather").GetProperty("temperature").GetDouble(), degraded.GetProperty("weather").GetProperty("temperature").GetDouble());
+        Assert.Equal("ok", degraded.SourceStatus("airQuality"));
     }
 
     [Fact]

@@ -34,6 +34,7 @@ internal static class OpenMeteoHttp
             var body = await response.Content.ReadFromJsonAsync<T>(SerializerOptions, cancellationToken);
             return new OpenMeteoResponse<T>(body is null ? OpenMeteoOutcome.Failed : OpenMeteoOutcome.Success, body);
         }
+        // Network, HTTP, timeout, open-circuit, limiter and JSON errors make the call Failed (unavailable); only the caller's cancellation propagates.
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             logger.CallFailed(source, exception);

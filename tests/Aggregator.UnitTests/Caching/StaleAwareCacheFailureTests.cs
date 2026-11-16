@@ -1,8 +1,10 @@
 using Aggregator.Core.Model;
 using Aggregator.Infrastructure.Caching;
-using Microsoft.Extensions.Caching.Hybrid;
 using Aggregator.UnitTests.Support;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Caching;
@@ -18,13 +20,14 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
     private static readonly Weather New = new(new CurrentWeather(25, 9), []);
 
     private readonly FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 16, 10, 0, 0, TimeSpan.Zero));
+    private readonly FakeLogger<StaleAwareCache> logger = new();
     private readonly ServiceProvider provider;
     private readonly StaleAwareCache cache;
 
     public StaleAwareCacheFailureTests()
     {
         provider = FakeClockCache.Create(time);
-        cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>());
+        cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>(), logger);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -165,13 +168,57 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
 
     [Fact]
     [FailureScenario]
-    public async Task UnexpectedExceptionInTheSource_PropagatesInsteadOfBeingHiddenAsStale()
+    public async Task UnexpectedExceptionInTheSource_ServesTheLastGoodValueAndLogsAnError()
     {
         await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Ok(Old)), FreshFor, KeepLastGood, Ct);
         time.Advance(PastFreshness);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            cache.GetAsync<Weather>("key", _ => throw new InvalidOperationException("bug"), FreshFor, KeepLastGood, Ct));
+        var result = await cache.GetAsync<Weather>("key", _ => throw new FormatException("unexpected time format"), FreshFor, KeepLastGood, Ct);
+
+        Assert.Equal((SourceStatus.Stale, Old.Current), (result.Status, result.Value!.Current));
+        var error = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal((LogLevel.Error, 2101), (error.Level, error.Id.Id));
+        Assert.IsType<FormatException>(error.Exception);
+        Assert.Contains("key", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [FailureScenario]
+    public async Task UnexpectedExceptionWithoutHistory_IsUnavailableAndNotCached()
+    {
+        var unavailable = await cache.GetAsync<Weather>("key", _ => throw new InvalidOperationException("bug"), FreshFor, KeepLastGood, Ct);
+        var next = await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Ok(New)), FreshFor, KeepLastGood, Ct);
+
+        Assert.Equal(SourceStatus.Unavailable, unavailable.Status);
+        Assert.Equal(SourceStatus.Ok, next.Status);
+    }
+
+    [Fact]
+    [FailureScenario]
+    public async Task ExpectedUnavailability_IsNotLoggedAsAnError()
+    {
+        await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Unavailable<Weather>()), FreshFor, KeepLastGood, Ct);
+
+        Assert.Empty(logger.Collector.GetSnapshot());
+    }
+
+    [Fact]
+    [FailureScenario]
+    public async Task CallerCancelsWhileTheSourceThrows_CancellationStillPropagates()
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cache.GetAsync<Weather>(
+            "key",
+            async _ =>
+            {
+                await cancellation.CancelAsync();
+                throw new InvalidOperationException("bug");
+            },
+            FreshFor,
+            KeepLastGood,
+            cancellation.Token));
+        Assert.Empty(logger.Collector.GetSnapshot());
     }
 
     public void Dispose() => provider.Dispose();

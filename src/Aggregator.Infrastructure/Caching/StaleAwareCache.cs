@@ -1,9 +1,10 @@
 using Aggregator.Core.Model;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Logging;
 
 namespace Aggregator.Infrastructure.Caching;
 
-internal sealed class StaleAwareCache(HybridCache cache)
+internal sealed class StaleAwareCache(HybridCache cache, ILogger<StaleAwareCache> logger)
 {
     // HybridCache has no TryGet: a lookup is GetOrCreateAsync with a factory that is never called.
     private static readonly HybridCacheEntryOptions ReadOnly = new() { Flags = HybridCacheEntryFlags.DisableUnderlyingData };
@@ -40,8 +41,12 @@ internal sealed class StaleAwareCache(HybridCache cache)
                 freshOptions,
                 cancellationToken: cancellationToken);
         }
-        catch (SourceUnavailableException) when (!cancellationToken.IsCancellationRequested)
+        // Any failure except the caller's own cancellation degrades only this source; unexpected ones are logged as errors.
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
+            if (exception is not SourceUnavailableException)
+                logger.UnexpectedFetchFailure(key, exception);
+
             // Read-only lookup of the last good value: on a miss nothing is fetched or stored.
             var lastGood = await cache.GetOrCreateAsync<SourceResult<T>?>(
                 lastGoodKey,

@@ -4,6 +4,7 @@ using Aggregator.Infrastructure.Caching;
 using Aggregator.Infrastructure.Options;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Aggregator.UnitTests.Caching;
@@ -57,7 +58,7 @@ public sealed class CachingSourceTests : IDisposable
         var slowInner = new GatedCountingSource(gate.Task);
         var source = new CachingSource<GeocodingQuery, IReadOnlyList<Place>>(
             slowInner,
-            new StaleAwareCache(provider.GetRequiredService<HybridCache>()),
+            new StaleAwareCache(provider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance),
             policy,
             new StaticOptionsMonitor(new SourceClientOptions { LastGoodRetention = TimeSpan.FromHours(1) }));
 
@@ -73,7 +74,7 @@ public sealed class CachingSourceTests : IDisposable
     [Fact]
     public async Task FetchAsync_SameQueryThroughDifferentSources_IsCachedSeparately()
     {
-        var sharedCache = new StaleAwareCache(provider.GetRequiredService<HybridCache>());
+        var sharedCache = new StaleAwareCache(provider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance);
         var options = new StaticOptionsMonitor(new SourceClientOptions { CacheTtl = TimeSpan.FromMinutes(5), LastGoodRetention = TimeSpan.FromHours(1) });
         var weatherInner = new NamedWeatherSource(SourceNames.Weather, 18);
         var marineInner = new NamedWeatherSource(SourceNames.Marine, 99);
@@ -99,7 +100,7 @@ public sealed class CachingSourceTests : IDisposable
     private CachingSource<GeocodingQuery, IReadOnlyList<Place>> CreateSource() =>
         new(
             inner,
-            new StaleAwareCache(provider.GetRequiredService<HybridCache>()),
+            new StaleAwareCache(provider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance),
             policy,
             new StaticOptionsMonitor(new SourceClientOptions { LastGoodRetention = TimeSpan.FromHours(1) }));
 

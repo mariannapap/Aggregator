@@ -3,6 +3,7 @@ using Aggregator.Infrastructure.Caching;
 using Aggregator.UnitTests.Support;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Caching;
@@ -40,8 +41,8 @@ public sealed class CacheRoundTripTests : IDisposable
         sharedL2 = new InMemoryDistributedCache(time);
         writerProvider = FakeClockCache.Create(time, sharedL2);
         readerProvider = FakeClockCache.Create(time, sharedL2);
-        writer = new StaleAwareCache(writerProvider.GetRequiredService<HybridCache>());
-        reader = new StaleAwareCache(readerProvider.GetRequiredService<HybridCache>());
+        writer = new StaleAwareCache(writerProvider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance);
+        reader = new StaleAwareCache(readerProvider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
