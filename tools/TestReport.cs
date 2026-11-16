@@ -126,7 +126,11 @@ report.AppendLine();
 report.AppendLine("## Code coverage");
 report.AppendLine();
 if (coverageSummary != "-" && File.Exists(coverageSummary))
+{
+    report.AppendLine("Unit and integration tests combined. Code generated at build time (files under `obj/`: `[LoggerMessage]` logging and the OpenAPI XML-comment transformers) is excluded.");
+    report.AppendLine();
     report.AppendLine(DemoteHeadings(File.ReadAllText(coverageSummary)).Trim());
+}
 else
     report.AppendLine("_Coverage was not collected._");
 

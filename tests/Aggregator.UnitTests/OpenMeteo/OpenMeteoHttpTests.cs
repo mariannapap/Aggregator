@@ -1,5 +1,10 @@
+using System.Text.Json;
 using Aggregator.Infrastructure.OpenMeteo;
+using Aggregator.UnitTests.Support;
 using Microsoft.Extensions.Logging.Testing;
+using Polly.CircuitBreaker;
+using Polly.RateLimiting;
+using Polly.Timeout;
 
 namespace Aggregator.UnitTests.OpenMeteo;
 
@@ -35,7 +40,54 @@ public sealed class OpenMeteoHttpTests
         var response = await OpenMeteoHttp.GetAsync<object>(http, "v1/test", "test", logger, Ct);
 
         Assert.Equal(OpenMeteoOutcome.Failed, response.Outcome);
-        Assert.Single(logger.Collector.GetSnapshot());
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal((2006, null), (record.Id.Id, record.Exception));
+    }
+
+    [Theory]
+    [InlineData("open circuit")]
+    [InlineData("limiter")]
+    [InlineData("attempt timeout")]
+    [InlineData("network")]
+    [FailureScenario]
+    public async Task ExpectedFailure_IsLoggedOnOneLine_WithoutTheStackTrace(string failure)
+    {
+        Exception exception = failure switch
+        {
+            "open circuit" => new BrokenCircuitException(),
+            "limiter" => new RateLimiterRejectedException(),
+            "attempt timeout" => new TimeoutRejectedException(),
+            _ => new HttpRequestException("Connection refused")
+        };
+        using var http = new HttpClient(new ThrowingHandler(exception)) { BaseAddress = new Uri("https://api.example.test/") };
+        var logger = new FakeLogger();
+
+        var response = await OpenMeteoHttp.GetAsync<object>(http, "v1/test", "test", logger, Ct);
+
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(OpenMeteoOutcome.Failed, response.Outcome);
+        Assert.Equal((2006, null), (record.Id.Id, record.Exception));
+        Assert.Contains(exception.GetType().Name, record.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [FailureScenario]
+    public async Task UnexpectedFailure_KeepsTheException()
+    {
+        using var http = new HttpClient(FakeHttpHandler.Returning("not json")) { BaseAddress = new Uri("https://api.example.test/") };
+        var logger = new FakeLogger();
+
+        await OpenMeteoHttp.GetAsync<object>(http, "v1/test", "test", logger, Ct);
+
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(2001, record.Id.Id);
+        Assert.IsType<JsonException>(record.Exception, exactMatch: false);
+    }
+
+    private sealed class ThrowingHandler(Exception exception) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(exception);
     }
 
     private sealed class HangingHandler : HttpMessageHandler

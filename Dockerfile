@@ -9,6 +9,7 @@ COPY src/Aggregator.Infrastructure/Aggregator.Infrastructure.csproj src/Aggregat
 COPY tests/Aggregator.UnitTests/Aggregator.UnitTests.csproj tests/Aggregator.UnitTests/
 COPY tests/Aggregator.IntegrationTests/Aggregator.IntegrationTests.csproj tests/Aggregator.IntegrationTests/
 COPY tests/Aggregator.EndToEndTests/Aggregator.EndToEndTests.csproj tests/Aggregator.EndToEndTests/
+COPY tests/Aggregator.LiveTests/Aggregator.LiveTests.csproj tests/Aggregator.LiveTests/
 RUN dotnet restore Aggregator.slnx
 COPY . .
 RUN dotnet build Aggregator.slnx -c Release --no-restore
@@ -26,7 +27,7 @@ RUN mkdir -p /report \
  && /tools/dotnet-coverage collect --output /report/integration.cobertura.xml --output-format cobertura \
       "dotnet tests/Aggregator.IntegrationTests/bin/Release/net10.0/Aggregator.IntegrationTests.dll -result-xml /report/integration.xml" \
  && /tools/reportgenerator "-reports:/report/*.cobertura.xml" -targetdir:/report/coverage -reporttypes:MarkdownSummaryGithub \
-      "-assemblyfilters:+Aggregator.Api;+Aggregator.Core;+Aggregator.Infrastructure" \
+      "-assemblyfilters:+Aggregator.Api;+Aggregator.Core;+Aggregator.Infrastructure" "-filefilters:-*/obj/*" \
  && (dotnet run tools/TestReport.cs -- /report/test-report.md /report/coverage/SummaryGithub.md /report/unit.xml /report/integration.xml || true)
 
 FROM scratch AS test-report-export

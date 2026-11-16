@@ -34,6 +34,23 @@ public sealed class CacheKeyTests
         Assert.Equal(variants.Select(query => OpenMeteoLocationClient.BuildUri(Endpoint, query)).Distinct().Count(), requestsByKey.Count);
     }
 
+    [Fact]
+    public void LocationQuery_FallbackKey_IgnoresOnlyTheWindowStart()
+    {
+        var coordinates = new Coordinates(37.98, 23.73);
+        var at10 = new LocationQuery(coordinates, 2, includeCurrent: true, new HourlyWindow(Start, 24));
+
+        Assert.Equal(at10.FallbackKey, new LocationQuery(coordinates, 2, includeCurrent: true, new HourlyWindow(Start.AddHours(1), 24)).FallbackKey);
+        Assert.NotEqual(at10.FallbackKey, new LocationQuery(coordinates, 2, includeCurrent: true, new HourlyWindow(Start, 48)).FallbackKey);
+        Assert.NotEqual(at10.FallbackKey, new LocationQuery(coordinates, 2, includeCurrent: false, new HourlyWindow(Start, 24)).FallbackKey);
+        Assert.NotEqual(at10.FallbackKey, new LocationQuery(coordinates, 2, includeCurrent: true, hourly: null).FallbackKey);
+        Assert.NotEqual(at10.FallbackKey, new LocationQuery(new Coordinates(37.99, 23.73), 2, includeCurrent: true, new HourlyWindow(Start, 24)).FallbackKey);
+    }
+
+    [Fact]
+    public void OtherQueries_FallBackOnTheirOwnKey() =>
+        Assert.Equal(new GeocodingQuery("Athens", "GR").CacheKey, ((ISourceQuery)new GeocodingQuery("Athens", "GR")).FallbackKey);
+
     [Theory]
     [InlineData("Athens", "US")]
     [InlineData("Athina", "GR")]

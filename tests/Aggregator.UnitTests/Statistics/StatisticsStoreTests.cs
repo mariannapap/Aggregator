@@ -57,7 +57,7 @@ public sealed class StatisticsStoreTests
         Assert.Equal(writers * perWriter, snapshots.Sum(snapshot => snapshot.TotalRequests));
         Assert.All(snapshots, snapshot =>
             Assert.Equal(snapshot.TotalRequests, snapshot.Fast.Count + snapshot.Average.Count + snapshot.Slow.Count));
-        Assert.Equal(writers * perWriter / 2, store.Recent("weather", 1).Count);
+        Assert.Equal(writers * perWriter / 2, store.Recent("weather", 1).CurrentMinute.Count);
     }
 
     [Fact]
@@ -109,22 +109,37 @@ public sealed class StatisticsStoreTests
     }
 
     [Fact]
-    public void Recent_OnlyCountsTheRequestedMinutes()
+    public void Recent_WindowHoldsOnlyTheRequestedCompleteMinutes()
     {
         var store = CreateStore();
         store.Record("weather", TimeSpan.FromMilliseconds(100), succeeded: true);
         time.Advance(TimeSpan.FromMinutes(6));
         store.Record("weather", TimeSpan.FromMilliseconds(300), succeeded: true);
+        time.Advance(TimeSpan.FromMinutes(1));
 
         var recent = store.Recent("weather", 5);
 
-        Assert.Equal(1, recent.Count);
-        Assert.Equal(300, recent.AverageMs);
+        Assert.Equal(new WindowSample(1, 300), recent.Window);
+        Assert.Equal(new WindowSample(0, 0), recent.CurrentMinute);
         Assert.Equal(2, store.Total("weather").Count);
     }
 
     [Fact]
-    public void Recent_UnknownApi_IsEmpty() => Assert.Equal(0, CreateStore().Recent("missing", 5).Count);
+    public void Recent_TheMinuteInProgress_IsKeptOutOfTheWindow()
+    {
+        var store = CreateStore();
+        store.Record("weather", TimeSpan.FromMilliseconds(100), succeeded: true);
+        time.Advance(TimeSpan.FromSeconds(59));
+        store.Record("weather", TimeSpan.FromMilliseconds(300), succeeded: true);
+
+        var recent = store.Recent("weather", 5);
+
+        Assert.Equal(new WindowSample(0, 0), recent.Window);
+        Assert.Equal(new WindowSample(2, 400), recent.CurrentMinute);
+    }
+
+    [Fact]
+    public void Recent_UnknownApi_IsEmpty() => Assert.Equal(RecentActivity.None, CreateStore().Recent("missing", 5));
 
     [Fact]
     public void MonitoredApis_AreListedBeforeTheirFirstCall_WithoutAverages()

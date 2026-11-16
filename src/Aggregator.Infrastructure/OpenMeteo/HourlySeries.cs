@@ -4,7 +4,8 @@ namespace Aggregator.Infrastructure.OpenMeteo;
 
 internal static class HourlySeries
 {
-    public static PivotResult Pivot(IReadOnlyList<string>? times, HourlyWindow window, HourlyCategory category, IReadOnlyList<MetricSeries> series)
+    // A row whose time could not be read is skipped, which leaves the series incomplete.
+    public static PivotResult Pivot(IReadOnlyList<DateTimeOffset?>? times, HourlyWindow window, HourlyCategory category, IReadOnlyList<MetricSeries> series)
     {
         if (times is null)
             return new PivotResult([], false);
@@ -16,8 +17,7 @@ internal static class HourlySeries
             var found = 0;
             for (var index = 0; index < times.Count; index++)
             {
-                var time = OpenMeteoHttp.ParseTime(times[index]);
-                if (!window.Contains(time))
+                if (times[index] is not { } time || !window.Contains(time))
                     continue;
 
                 var value = metric.Values is not null && index < metric.Values.Count ? metric.Values[index] : null;

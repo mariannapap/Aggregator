@@ -32,8 +32,8 @@ public sealed class StatisticsStore(IOptions<StatisticsOptions> options, TimePro
     public WindowSample Total(string api) =>
         statistics.TryGetValue(api, out var stats) ? stats.Total() : new WindowSample(0, 0);
 
-    public WindowSample Recent(string api, int minutes) =>
-        statistics.TryGetValue(api, out var stats) ? stats.Recent(CurrentMinute(), minutes) : new WindowSample(0, 0);
+    public RecentActivity Recent(string api, int completeMinutes) =>
+        statistics.TryGetValue(api, out var stats) ? stats.Recent(CurrentMinute(), completeMinutes) : RecentActivity.None;
 
     private long CurrentMinute() => timeProvider.GetUtcNow().ToUnixTimeSeconds() / 60;
 
@@ -109,21 +109,23 @@ public sealed class StatisticsStore(IOptions<StatisticsOptions> options, TimePro
             return new WindowSample(current.Count, current.TotalMs);
         }
 
-        public WindowSample Recent(long currentMinute, int minutes)
+        public RecentActivity Recent(long currentMinute, int completeMinutes)
         {
-            long count = 0;
-            double total = 0;
+            var window = new WindowSample(0, 0);
+            var current = new WindowSample(0, 0);
             for (var index = 0; index < slots.Length; index++)
             {
                 var slot = Volatile.Read(ref slots[index]);
-                if (slot is not null && slot.Minute > currentMinute - minutes && slot.Minute <= currentMinute)
-                {
-                    count += slot.Count;
-                    total += slot.TotalMs;
-                }
+                if (slot is null)
+                    continue;
+
+                if (slot.Minute == currentMinute)
+                    current = new WindowSample(slot.Count, slot.TotalMs);
+                else if (slot.Minute >= currentMinute - completeMinutes && slot.Minute < currentMinute)
+                    window = new WindowSample(window.Count + slot.Count, window.TotalMs + slot.TotalMs);
             }
 
-            return new WindowSample(count, total);
+            return new RecentActivity(window, current);
         }
 
         public ApiStatisticsSnapshot Snapshot(string api)

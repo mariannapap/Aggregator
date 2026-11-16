@@ -9,6 +9,7 @@ using Aggregator.Infrastructure.Options;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 
 namespace Aggregator.Infrastructure;
@@ -54,12 +55,23 @@ public static class InfrastructureServiceCollectionExtensions
         where TSource : class, IExternalSource<TQuery, TResult>
     {
         var section = $"{SourceClientOptions.SectionPrefix}:{name}";
-        services.AddOptions<SourceClientOptions>(name).BindConfiguration(section).ValidateDataAnnotations().ValidateOnStart();
         services.AddSingleton(new MonitoredApi(name));
 
         var client = services.AddHttpClient<IExternalSource<TQuery, TResult>, TSource>(name, (provider, http) =>
             http.BaseAddress = provider.GetRequiredService<IOptionsMonitor<SourceClientOptions>>().Get(name).BaseUrl);
-        client.AddStandardResilienceHandler(configuration.GetSection($"{section}:Resilience"));
+        var resilience = client.AddStandardResilienceHandler(configuration.GetSection($"{section}:Resilience"));
+
+        // After the resilience handler, which sets an infinite HttpClient timeout. Its timeouts end with the response headers,
+        // so without this the body download had no limit; this one also covers the wait for a limiter permit.
+        client.ConfigureHttpClient((provider, http) =>
+            http.Timeout = provider.GetRequiredService<IOptionsMonitor<SourceClientOptions>>().Get(name).CallBudget);
+
+        services.AddOptions<SourceClientOptions>(name)
+            .BindConfiguration(section)
+            .Configure<IOptionsMonitor<HttpStandardResilienceOptions>>((settings, pipelines) =>
+                settings.CallBudget = pipelines.Get(resilience.PipelineName).TotalRequestTimeout.Timeout)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         client.AddHttpMessageHandler(provider => new StatisticsHandler(
             name,
             provider.GetRequiredService<IStatisticsRecorder>(),

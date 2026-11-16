@@ -35,23 +35,37 @@ public sealed class CityReportService(
 
         // Relevance and name order come from geocoding alone; only a temperature sort needs the weather of every place first.
         var weatherFirst = request.Sort.Field == PlaceSortField.Temperature;
-        var candidates = await Task.WhenAll(matchingPlaces.Select(async place => new PlaceReport(
+        var candidates = await ForEachPlaceAsync(matchingPlaces, async (place, token) => new PlaceReport(
             place,
             distance.DistanceKm(place.Coordinates),
             PlaceRanker.Rank(place, request.City),
             new SourceState(geocoded.Status, geocoded.FetchedAt),
-            weatherFirst ? await FetchAsync(weather, CreateQuery(place, request, ReportSections.Weather, HourlyCategory.Weather, window), cancellationToken) : null,
+            weatherFirst ? await FetchAsync(weather, CreateQuery(place, request, ReportSections.Weather, HourlyCategory.Weather, window), token) : null,
             null,
             null,
             null,
-            null)));
+            null), cancellationToken);
         var page = PlaceSorter.Sort(candidates, request.Sort).Skip(request.Page.Offset).Take(request.Page.Limit).ToList();
 
-        var reports = await Task.WhenAll(page.Select(candidate =>
-            CompletePlaceReportAsync(candidate, weatherFirst, request, window, hourlyRange, cancellationToken)));
+        var reports = await ForEachPlaceAsync(page, (candidate, token) =>
+            CompletePlaceReportAsync(candidate, weatherFirst, request, window, hourlyRange, token), cancellationToken);
 
         return new CityReportOutcome.Found(
             new CityReport(new ReportFilters(regionMatch, hourlyRange, candidates.Length, page.Count < candidates.Length), reports));
+    }
+
+    // At most MaxConcurrentPlaces places in flight, so one request cannot take every permit of the shared per-API limiters; results keep the input order.
+    private async Task<PlaceReport[]> ForEachPlaceAsync<TItem>(
+        IReadOnlyList<TItem> items,
+        Func<TItem, CancellationToken, Task<PlaceReport>> work,
+        CancellationToken cancellationToken)
+    {
+        var results = new PlaceReport[items.Count];
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, items.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = options.Value.MaxConcurrentPlaces, CancellationToken = cancellationToken },
+            async (index, token) => results[index] = await work(items[index], token));
+        return results;
     }
 
     private (IReadOnlyList<Place> Places, RegionMatch? Match) FilterByRegion(IReadOnlyList<Place> places, string? region)

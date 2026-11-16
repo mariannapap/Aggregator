@@ -6,7 +6,8 @@ public sealed class CityReportOptions
 {
     public const string SectionName = "CityReport";
 
-    [Range(0, 6)]
+    // Cache keys and upstream URLs carry at most 4 decimals (about 11 m), so more would be silently ignored.
+    [Range(0, 4)]
     public int CoordinateDecimals { get; set; } = 2;
 
     [Range(1, 168)]
@@ -23,4 +24,8 @@ public sealed class CityReportOptions
 
     [Range(1, 100)]
     public int MaxPlaceLimit { get; set; } = 100;
+
+    // Places processed at once by one request; each place makes up to one call per source.
+    [Range(1, 100)]
+    public int MaxConcurrentPlaces { get; set; } = 5;
 }

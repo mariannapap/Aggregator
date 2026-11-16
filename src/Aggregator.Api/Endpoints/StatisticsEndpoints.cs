@@ -13,12 +13,16 @@ internal static class StatisticsEndpoints
         endpoints.MapGet("/stats", GetStatistics)
             .RequireAuthorization(AuthOptions.ReaderPolicy)
             .WithTags("Statistics")
-            .WithSummary("Total requests and average response time per external API, grouped in performance buckets.")
+            .WithSummary("Total requests and average response time per external API, grouped in performance buckets, with each API's current anomaly state.")
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden);
         return endpoints;
     }
 
-    private static Ok<StatisticsResponse> GetStatistics(IStatisticsReader statistics, IOptions<StatisticsOptions> options) =>
-        TypedResults.Ok(statistics.Snapshot().ToResponse(options.Value));
+    private static Ok<StatisticsResponse> GetStatistics(
+        IStatisticsReader statistics,
+        IAnomalyDetector anomalies,
+        IOptions<StatisticsOptions> statisticsOptions,
+        IOptions<AnomalyOptions> anomalyOptions) =>
+        TypedResults.Ok(statistics.Snapshot().ToResponse(anomalies.Assess(), statisticsOptions.Value, anomalyOptions.Value));
 }

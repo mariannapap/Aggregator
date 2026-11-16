@@ -7,6 +7,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Api;
 
+// Runs are sequential, so once the detector has started run N + 1, everything run N logs is in the collector.
 [Requirement("O2")]
 public sealed class AnomalyBackgroundServiceTests
 {
@@ -21,81 +22,95 @@ public sealed class AnomalyBackgroundServiceTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task Tick_WithAnomaly_LogsWarning()
+    public async Task LastingAnomaly_LogsOneWarning()
     {
-        using var detector = new StubDetector(_ => [new PerformanceAnomaly("weather", 300, 100, 6)]);
-        using var service = CreateService(detector);
+        using var detector = new StubDetector(_ => [Weather(AnomalyState.Anomalous)]);
 
-        await service.StartAsync(Ct);
-        await TickUntilAsync(detector, () => logger.Collector.Count >= 1, "a log line");
-        await service.StopAsync(Ct);
+        var records = await RunAsync(detector, runs: 3);
 
-        var record = logger.Collector.GetSnapshot()[0];
-        Assert.Equal(LogLevel.Warning, record.Level);
-        Assert.Equal(3001, record.Id.Id);
+        var record = Assert.Single(records);
+        Assert.Equal((LogLevel.Warning, 3001), (record.Level, record.Id.Id));
         Assert.Contains("weather", record.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(AnomalyState.Normal)]
+    [InlineData(AnomalyState.InsufficientData)]
+    public async Task AnomalyEnds_LogsOneInformation(AnomalyState after)
+    {
+        using var detector = new StubDetector(call => [Weather(call <= 2 ? AnomalyState.Anomalous : after)]);
+
+        var records = await RunAsync(detector, runs: 4);
+
+        Assert.Equal([(LogLevel.Warning, 3001), (LogLevel.Information, 3003)], records.Select(record => (record.Level, record.Id.Id)));
+        Assert.Contains(after.ToString(), records[1].Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnomalyReturns_IsLoggedAgain()
+    {
+        using var detector = new StubDetector(call => [Weather(call == 2 ? AnomalyState.Normal : AnomalyState.Anomalous)]);
+
+        var records = await RunAsync(detector, runs: 3);
+
+        Assert.Equal([3001, 3003, 3001], records.Select(record => record.Id.Id));
     }
 
     [Fact]
     [FailureScenario]
-    public async Task Tick_DetectorThrows_LogsErrorAndKeepsRunning()
+    public async Task DetectorThrows_LogsErrorAndKeepsRunning()
     {
         using var detector = new StubDetector(call => call == 1
             ? throw new InvalidOperationException("boom")
-            : [new PerformanceAnomaly("airQuality", 400, 100, 5)]);
-        using var service = CreateService(detector);
+            : [new ApiPerformance("airQuality", AnomalyState.Anomalous, 5, 400, 50, 100)]);
 
-        await service.StartAsync(Ct);
-        await TickUntilAsync(detector, () => logger.Collector.Count >= 2, "two log lines");
-        await service.StopAsync(Ct);
+        var records = await RunAsync(detector, runs: 2);
 
-        var records = logger.Collector.GetSnapshot();
-        Assert.Equal((LogLevel.Error, 3002), (records[0].Level, records[0].Id.Id));
-        Assert.Equal((LogLevel.Warning, 3001), (records[1].Level, records[1].Id.Id));
+        Assert.Equal([(LogLevel.Error, 3002), (LogLevel.Warning, 3001)], records.Select(record => (record.Level, record.Id.Id)));
     }
 
     [Fact]
-    public async Task Tick_NoAnomalies_RunsTheDetectorAndLogsNothing()
+    public async Task NoAnomalies_RunsTheDetectorAndLogsNothing()
     {
-        using var detector = new StubDetector(_ => []);
-        using var service = CreateService(detector);
+        using var detector = new StubDetector(_ => [Weather(AnomalyState.Normal), Weather(AnomalyState.InsufficientData) with { Api = "marine" }]);
 
-        await service.StartAsync(Ct);
-        await TickUntilAsync(detector, () => detector.Calls >= 3, "three detector runs");
-        await service.StopAsync(Ct);
-
-        Assert.Empty(logger.Collector.GetSnapshot());
+        Assert.Empty(await RunAsync(detector, runs: 3));
     }
 
-    private AnomalyBackgroundService CreateService(IAnomalyDetector detector) =>
-        new(detector, Options.Create(new AnomalyOptions { Interval = Interval }), time, logger);
+    private static ApiPerformance Weather(AnomalyState state) => new("weather", state, 6, 300, 60, 100);
 
-    // Advances fake time one interval at a time and waits for the detector to signal each run, until done.
-    private async Task TickUntilAsync(StubDetector detector, Func<bool> done, string what)
+    private async Task<IReadOnlyList<FakeLogRecord>> RunAsync(StubDetector detector, int runs)
     {
+        using var service = new AnomalyBackgroundService(detector, Options.Create(new AnomalyOptions { Interval = Interval }), time, logger);
+        await service.StartAsync(Ct);
+
         var deadline = DateTime.UtcNow + Deadline;
-        while (!done() && DateTime.UtcNow < deadline)
+        while (detector.Calls <= runs && DateTime.UtcNow < deadline)
         {
             time.Advance(Interval);
             await detector.WaitForRunAsync(TimeSpan.FromMilliseconds(200));
         }
 
-        Assert.True(done(), $"Timed out after {Deadline.TotalSeconds:0} s waiting for {what}; the detector ran {detector.Calls} time(s).");
+        await service.StopAsync(Ct);
+        Assert.True(detector.Calls > runs, $"Timed out after {Deadline.TotalSeconds:0} s; the detector ran {detector.Calls} time(s), {runs + 1} needed.");
+
+        // The extra run only proves the earlier ones finished logging; it repeats the last state, so it logs nothing new.
+        return logger.Collector.GetSnapshot();
     }
 
-    private sealed class StubDetector(Func<int, IReadOnlyList<PerformanceAnomaly>> detect) : IAnomalyDetector, IDisposable
+    private sealed class StubDetector(Func<int, IReadOnlyList<ApiPerformance>> assess) : IAnomalyDetector, IDisposable
     {
         private readonly SemaphoreSlim ran = new(0);
         private int calls;
 
         public int Calls => Volatile.Read(ref calls);
 
-        public IReadOnlyList<PerformanceAnomaly> Detect()
+        public IReadOnlyList<ApiPerformance> Assess()
         {
             var call = Interlocked.Increment(ref calls);
             try
             {
-                return detect(call);
+                return assess(call);
             }
             finally
             {

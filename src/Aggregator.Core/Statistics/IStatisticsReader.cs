@@ -8,5 +8,5 @@ public interface IStatisticsReader
 
     WindowSample Total(string api);
 
-    WindowSample Recent(string api, int minutes);
+    RecentActivity Recent(string api, int completeMinutes);
 }

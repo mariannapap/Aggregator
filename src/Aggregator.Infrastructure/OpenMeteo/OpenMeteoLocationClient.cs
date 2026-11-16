@@ -38,10 +38,19 @@ internal sealed class OpenMeteoLocationClient(HttpClient http, ILogger logger)
         IReadOnlyList<HourlyReading> hourly = [];
         if (query.Hourly is { } window)
         {
+            var times = ReadTimes(body.Hourly);
+
+            // Not one readable time means the format changed, not that data is missing: fail so the last good value is served.
+            if (times is { Count: > 0 } && times.All(time => time is null))
+            {
+                logger.UnreadableHourlyTimes(endpoint.Source);
+                return SourceResult.Unavailable<TResult>();
+            }
+
             var series = endpoint.Series
                 .Select(item => new MetricSeries(item.Metric, ReadValues(body.Hourly, item.Field), HourlySeries.Unit(body.HourlyUnits, item.Field, item.DefaultUnit)))
                 .ToList();
-            var pivot = HourlySeries.Pivot(ReadTimes(body.Hourly), window, endpoint.Category, series);
+            var pivot = HourlySeries.Pivot(times, window, endpoint.Category, series);
             hourly = pivot.Readings;
             complete &= pivot.Complete;
         }
@@ -91,9 +100,9 @@ internal sealed class OpenMeteoLocationClient(HttpClient http, ILogger logger)
         return values;
     }
 
-    private static List<string>? ReadTimes(IReadOnlyDictionary<string, JsonElement>? hourly) =>
+    private static List<DateTimeOffset?>? ReadTimes(IReadOnlyDictionary<string, JsonElement>? hourly) =>
         hourly is not null && hourly.TryGetValue("time", out var times) && times.ValueKind == JsonValueKind.Array
-            ? times.EnumerateArray().Select(time => time.GetString() ?? string.Empty).ToList()
+            ? times.EnumerateArray().Select(OpenMeteoHttp.TryParseTime).ToList()
             : null;
 
     private static List<double?>? ReadValues(IReadOnlyDictionary<string, JsonElement>? hourly, string field) =>

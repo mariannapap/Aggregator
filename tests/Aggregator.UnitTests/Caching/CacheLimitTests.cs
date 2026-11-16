@@ -97,7 +97,7 @@ public sealed class CacheLimitTests : IDisposable
     {
         var times = await WithOldValueExpiredAsync();
 
-        await cache.GetAsync<Weather>("key", _ => { calls++; throw new FormatException("broken payload"); }, times, Ct);
+        await cache.GetAsync<Weather>("key", "key", _ => { calls++; throw new FormatException("broken payload"); }, times, Ct);
         await GetAsync(Counted(SourceResult.Ok(Old)), times);
 
         Assert.Equal(1, calls);
@@ -132,5 +132,5 @@ public sealed class CacheLimitTests : IDisposable
     };
 
     private Task<SourceResult<Weather>> GetAsync(Func<CancellationToken, Task<SourceResult<Weather>>> fetch, CacheTimes times) =>
-        cache.GetAsync("key", fetch, times, Ct);
+        cache.GetAsync("key", "key", fetch, times, Ct);
 }

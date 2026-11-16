@@ -24,7 +24,7 @@ Content-Type: application/json
 
 > {% client.global.set("token", response.body.access_token); %}
 
-### Every place named Athens in Greece, nearest to the Acropolis first
+### Every place named Athens in Greece, best name match first (sort=relevance, the default)
 GET {{host}}/city-report/GR/Athens
 Authorization: Bearer {{token}}
 
@@ -32,7 +32,7 @@ Authorization: Bearer {{token}}
 GET {{host}}/city-report/GR/Chania?region=crete&sort=-temperature&include=weather,hourly&hourly.category=weather&hourly.sort=-time
 Authorization: Bearer {{token}}
 
-### Degraded: Ioannina is inland, so the marine API has nothing for it (sources.marine = no_data) while the rest is ok
+### No marine data, but not degraded: Ioannina is inland, so sources.marine = no_data (a valid answer) and degraded = false
 GET {{host}}/city-report/GR/Ioannina
 Authorization: Bearer {{token}}
 

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Aggregator.Infrastructure.Http;
 using Microsoft.Extensions.Logging;
 
 namespace Aggregator.Infrastructure.OpenMeteo;
@@ -37,7 +38,11 @@ internal static class OpenMeteoHttp
         // Network, HTTP, timeout, open-circuit, limiter and JSON errors make the call Failed (unavailable); only the caller's cancellation propagates.
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
-            logger.CallFailed(source, exception);
+            if (ExpectedFailure.Describe(exception) is { } reason)
+                logger.CallFailed(source, reason);
+            else
+                logger.CallFailedUnexpectedly(source, exception);
+
             return new OpenMeteoResponse<T>(OpenMeteoOutcome.Failed, null);
         }
     }
@@ -45,8 +50,11 @@ internal static class OpenMeteoHttp
     public static string FormatHour(DateTimeOffset time) =>
         time.ToUniversalTime().ToString(TimeFormat, CultureInfo.InvariantCulture);
 
-    public static DateTimeOffset ParseTime(string value) =>
-        DateTimeOffset.ParseExact(value, TimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+    public static DateTimeOffset? TryParseTime(JsonElement value) =>
+        value.ValueKind == JsonValueKind.String
+        && DateTimeOffset.TryParseExact(value.GetString(), TimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var time)
+            ? time
+            : null;
 
     public static string FormatCoordinate(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 }

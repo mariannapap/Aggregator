@@ -137,6 +137,64 @@ public sealed class ResilienceTests
         Assert.Equal(2, factory.OpenMeteo.MaxInFlight(OpenMeteoHosts.Weather));
     }
 
+    // One permit, four places, 1 s per call: before the budget, the queue wait was outside every timeout and all four took 4 s.
+    [Fact]
+    [Requirement("R6"), FailureScenario]
+    public async Task TimeQueuedForAPermit_CountsAgainstTheCallBudget()
+    {
+        await using var factory = new AggregatorApiFactory();
+        factory.OpenMeteo.GeneratedPlaces = 4;
+        factory.OpenMeteo.SetDelay(OpenMeteoHosts.Weather, TimeSpan.FromSeconds(1));
+        var client = await factory.WithSettings(
+            ($"{WeatherResilience}:RateLimiter:DefaultRateLimiterOptions:PermitLimit", "1"),
+            ($"{WeatherResilience}:RateLimiter:DefaultRateLimiterOptions:QueueLimit", "100"),
+            ($"{WeatherResilience}:TotalRequestTimeout:Timeout", "00:00:01.500"),
+            ($"{WeatherResilience}:AttemptTimeout:Timeout", "00:00:01.200")).CreateAuthorizedClientAsync();
+
+        var started = Stopwatch.StartNew();
+        var statuses = (await client.GetJsonAsync($"{Report}?include=weather")).GetProperty("places").EnumerateArray().Select(place => place.SourceStatus("weather")).ToList();
+
+        Assert.Contains("ok", statuses);
+        Assert.Contains("unavailable", statuses);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(3.5), $"Took {started.Elapsed}.");
+    }
+
+    // Polly's timeouts end with the response headers; the body download used to be bounded only by HttpClient's 100 s default.
+    [Fact]
+    [Requirement("R6"), FailureScenario]
+    public async Task StalledResponseBody_EndsWithTheCallBudget()
+    {
+        await using var factory = new AggregatorApiFactory();
+        factory.OpenMeteo.GeneratedPlaces = 1;
+        factory.OpenMeteo.StallBody(OpenMeteoHosts.Weather);
+        var client = await factory.WithSettings(
+            ($"{WeatherResilience}:TotalRequestTimeout:Timeout", "00:00:01"),
+            ($"{WeatherResilience}:AttemptTimeout:Timeout", "00:00:00.800")).CreateAuthorizedClientAsync();
+
+        var place = (await client.GetJsonAsync($"{Report}?include=weather,airQuality").WaitAsync(TimeSpan.FromSeconds(10), Ct)).GetProperty("places")[0];
+
+        Assert.Equal("unavailable", place.SourceStatus("weather"));
+        Assert.Equal("ok", place.SourceStatus("airQuality"));
+    }
+
+    [Theory]
+    [InlineData("relevance")]
+    [InlineData("temperature")]
+    [Requirement("R10")]
+    public async Task OneRequest_KeepsAtMostMaxConcurrentPlacesInFlight_BelowThePermits(string sort)
+    {
+        await using var factory = new AggregatorApiFactory();
+        factory.OpenMeteo.GeneratedPlaces = 12;
+        factory.OpenMeteo.SetDelay(OpenMeteoHosts.Weather, TimeSpan.FromMilliseconds(100));
+        var client = await factory.WithSettings(("CityReport:MaxConcurrentPlaces", "3")).CreateAuthorizedClientAsync();
+
+        var places = (await client.GetJsonAsync($"{Report}?sort={sort}&limit=12")).GetProperty("places").EnumerateArray().ToList();
+
+        Assert.Equal(12, places.Count);
+        Assert.All(places, place => Assert.Equal("ok", place.SourceStatus("weather")));
+        Assert.Equal(3, factory.OpenMeteo.MaxInFlight(OpenMeteoHosts.Weather));
+    }
+
     [Fact]
     [Requirement("R10"), FailureScenario]
     public async Task ConcurrencyQueueFull_RejectedPlacesAreUnavailableButTheRequestSucceeds()

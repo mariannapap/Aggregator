@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Aggregator.Core.Model;
 using Aggregator.Core.Sources;
+using Aggregator.Infrastructure.Http;
 using Aggregator.Infrastructure.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -32,7 +33,11 @@ internal sealed class HazardsSource(HttpClient http, IOptions<HazardsOptions> op
         // Network, HTTP, timeout, open-circuit, limiter and JSON errors make the source unavailable; only the caller's cancellation propagates.
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
-            logger.CallFailed(Name, exception);
+            if (ExpectedFailure.Describe(exception) is { } reason)
+                logger.CallFailed(Name, reason);
+            else
+                logger.CallFailedUnexpectedly(Name, exception);
+
             return SourceResult.Unavailable<Hazards>();
         }
 

@@ -89,6 +89,24 @@ public sealed class OpenApiDocumentTests(OpenApiDocumentFixture fixture) : IClas
             status.GetProperty("enum").EnumerateArray().Select(value => value.GetString()).Order(StringComparer.Ordinal));
     }
 
+    [Theory]
+    [InlineData("WeatherResponse", "temperature", "°C")]
+    [InlineData("WeatherResponse", "windSpeed", "km/h")]
+    [InlineData("AirQualityResponse", "usAqi", "0–500")]
+    [InlineData("MarineResponse", "waveHeight", "metres")]
+    [InlineData("SourceResponse", "fetchedAt", "stale")]
+    [InlineData("CityReportResponse", "degraded", "no_data does not count")]
+    [InlineData("FiltersResponse", "truncated", "limit or offset")]
+    [InlineData("ApiStatisticsResponse", "totalRequests", "HTTP attempts")]
+    [InlineData("AnomalyResponse", "state", "insufficient_data")]
+    public void ContractFields_HaveDescriptionsFromTheXmlComments(string schema, string property, string expectedText)
+    {
+        var description = fixture.Document.GetProperty("components").GetProperty("schemas").GetProperty(schema)
+            .GetProperty("properties").GetProperty(property).GetProperty("description").GetString();
+
+        Assert.Contains(expectedText, description, StringComparison.Ordinal);
+    }
+
     private static JsonElement BearerScheme(JsonElement document) =>
         document.GetProperty("components").GetProperty("securitySchemes").GetProperty("Bearer");
 

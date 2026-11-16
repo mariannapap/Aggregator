@@ -1,13 +1,13 @@
 # Test report
 
-Generated 2026-11-16 21:01 UTC from the xUnit results of the Docker `test-report` stage.
+Generated 2026-11-16 22:12 UTC from the xUnit results of the Docker `test-report` stage.
 
-**370 tests · 370 passed · 0 failed · 0 skipped · 9.3 s** ✅
+**424 tests · 424 passed · 0 failed · 0 skipped · 14.2 s** ✅
 
 | Test project | Tests | Passed | Failed | Time |
 |---|---|---|---|---|
-| Aggregator.UnitTests | 266 | 266 | 0 | 1.3 s |
-| Aggregator.IntegrationTests | 104 | 104 | 0 | 8.1 s |
+| Aggregator.UnitTests | 296 | 296 | 0 | 2.4 s |
+| Aggregator.IntegrationTests | 128 | 128 | 0 | 11.8 s |
 
 Each test is tagged with the requirement(s) it proves and whether it emulates a success or a failure scenario. A test with several data rows (a theory) counts as one scenario.
 
@@ -17,19 +17,19 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 | Requirement | | Success scenarios | Failure scenarios | Result |
 |---|---|---|---|---|
-| **R1** | .NET service using ASP.NET Core | 0 | 0 | every integration test hosts the ASP.NET Core app (104 tests) |
-| **R2** | Architecture that makes integrating new APIs easy | 18 | 20 | ✅ |
-| **R3** | Data from at least three external APIs, simultaneously | 2 | 0 | ✅ |
+| **R1** | .NET service using ASP.NET Core | 0 | 0 | every integration test hosts the ASP.NET Core app (128 tests) |
+| **R2** | Architecture that makes integrating new APIs easy | 18 | 22 | ✅ |
+| **R3** | Data from at least three external APIs, simultaneously | 3 | 0 | ✅ |
 | **R4** | Endpoint returning the aggregated data | 18 | 4 | ✅ |
 | **R5** | Filtering and sorting (date, relevance, category) | 60 | 23 | ✅ |
-| **R6** | Error handling, transient failures, fallback | 4 | 93 | ✅ |
+| **R6** | Error handling, transient failures, fallback | 7 | 109 | ✅ |
 | **R7** | Unit tests | 0 | 0 | this report |
-| **R8** | Documentation | 8 | 0 | ✅ |
-| **R9** | Caching | 30 | 29 | ✅ |
-| **R10** | Parallelism | 3 | 1 | ✅ |
-| **R11** | Request statistics with performance buckets | 17 | 5 | ✅ |
-| **O1** | JWT bearer authentication | 12 | 10 | ✅ |
-| **O2** | Performance anomaly logging (background service) | 10 | 3 | ✅ |
+| **R8** | Documentation | 9 | 0 | ✅ |
+| **R9** | Caching | 34 | 38 | ✅ |
+| **R10** | Parallelism | 5 | 1 | ✅ |
+| **R11** | Request statistics with performance buckets | 19 | 5 | ✅ |
+| **O1** | JWT bearer authentication | 13 | 13 | ✅ |
+| **O2** | Performance anomaly logging (background service) | 16 | 3 | ✅ |
 
 ## R2: Architecture that makes integrating new APIs easy
 
@@ -71,13 +71,16 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Fetch → malformed json → returns unavailable | failure | ✅ | `OpenMeteoLocationClientTests` |
 | Fetch → missing current field → with hourly → returns partial | failure | ✅ | `OpenMeteoLocationClientTests` |
 | Fetch → missing hourly rows → returns partial | failure | ✅ | `OpenMeteoLocationClientTests` |
+| Fetch → no readable hourly time → returns unavailable → so the last good value is served | failure | ✅ | `OpenMeteoLocationClientTests` |
 | Fetch → nothing usable → returns no data | failure | ✅ | `OpenMeteoLocationClientTests` |
+| Fetch → one unreadable hourly time → skips that row → and returns partial (5 cases) | failure | ✅ | `OpenMeteoLocationClientTests` |
 | Fetch → server error → returns unavailable | failure | ✅ | `OpenMeteoLocationClientTests` |
 
 ## R3: Data from at least three external APIs, simultaneously
 
 | Scenario | Type | Result | Test |
 |---|---|---|---|
+| Get → keeps at most the configured number of places in flight (2 cases) | success | ✅ | `CityReportServiceConcurrencyTests` |
 | Get → starts every location call before any completes | success | ✅ | `CityReportServiceConcurrencyTests` |
 | Get → starts no location call before geocoding completes | success | ✅ | `CityReportServiceConcurrencyTests` |
 
@@ -203,8 +206,13 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Fresh report → has a fetch time per source → and is not degraded | success | ✅ | `DataAgeApiTests` |
 | No data is an answer → not a degradation | success | ✅ | `DataAgeApiTests` |
 | Concurrency limit → never exceeds the permits per api | success | ✅ | `ResilienceTests` |
+| One request → keeps at most max concurrent places in flight → below the permits (2 cases) | success | ✅ | `ResilienceTests` |
 | Hourly bounds → are clamped and reported in filters | success | ✅ | `SourceStatusApiTests` |
+| Every client → takes its call budget from its own total request timeout | success | ✅ | `StartupTests` |
+| Budget ends for one caller → the shared fetch carries on for the others | success | ✅ | `StaleAwareCacheBudgetTests` |
 | One source fails → the others keep serving their own cached entries | failure | ✅ | `CacheBehaviourTests` |
+| City name ending in a cache marker → cannot plant a fallback for another city | failure | ✅ | `CacheKeyApiTests` |
+| City name ending in a cache marker → does not overwrite another citys fallback | failure | ✅ | `CacheKeyApiTests` |
 | Failing api → is not called again during the cooldown | failure | ✅ | `CacheLimitApiTests` |
 | Simultaneous identical requests while an api is down → do not flood it | failure | ✅ | `CacheStampedeTests` |
 | City report → geocoding down without cache → returns 503 problem details | failure | ✅ | `CityReportApiTests` |
@@ -224,6 +232,8 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Repeated failures → open the circuit → calls for another place never reach the api | failure | ✅ | `ResilienceTests` |
 | Response slower than attempt timeout → is retried then unavailable | failure | ✅ | `ResilienceTests` |
 | Source down after expiry → serves last good value as stale | failure | ✅ | `ResilienceTests` |
+| Stalled response body → ends with the call budget | failure | ✅ | `ResilienceTests` |
+| Time queued for a permit → counts against the call budget | failure | ✅ | `ResilienceTests` |
 | Too many requests with retry after → waits the requested time then recovers | failure | ✅ | `ResilienceTests` |
 | Transient failure then success → is retried and reported ok | failure | ✅ | `ResilienceTests` |
 | Answer without usable values → is no data → and the other sources are unaffected | failure | ✅ | `SourceStatusApiTests` |
@@ -231,8 +241,9 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Incomplete current values → are partial → and the hourly rows are kept | failure | ✅ | `SourceStatusApiTests` |
 | Malformed value after expiry → serves the last good value as stale | failure | ✅ | `SourceStatusApiTests` |
 | Malformed value from one source → degrades only that source | failure | ✅ | `SourceStatusApiTests` |
+| One unreadable hourly time → is partial → and the other rows are kept | failure | ✅ | `SourceStatusApiTests` |
 | Upstream bad request → is called once without retry → and reported as no data | failure | ✅ | `SourceStatusApiTests` |
-| Invalid configuration → stops the app at startup (7 cases) | failure | ✅ | `StartupTests` |
+| Invalid configuration → stops the app at startup (8 cases) | failure | ✅ | `StartupTests` |
 | Server errors → count as failed → but an upstream 400 does not | failure | ✅ | `StatisticsApiTests` |
 | Parse → city longer than configured limit → is rejected | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → hourly category not in include → is rejected (2 cases) | failure | ✅ | `CityReportQueryParserTests` |
@@ -253,11 +264,18 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Without a cooldown → every request calls the source | failure | ✅ | `CacheLimitTests` |
 | Full weather graph → survives the last good path through the shared store | failure | ✅ | `CacheRoundTripTests` |
 | Serving stale → does not extend the last good retention | failure | ✅ | `CacheRoundTripTests` |
+| Fetch → source down when the hourly window moves → serves the previous window as stale | failure | ✅ | `CachingSourceTests` |
+| Caller cancels within the budget → cancellation propagates | failure | ✅ | `StaleAwareCacheBudgetTests` |
+| Source slower than the budget → with history → is stale when the budget ends | failure | ✅ | `StaleAwareCacheBudgetTests` |
+| Source slower than the budget → without history → is unavailable → and starts no cooldown | failure | ✅ | `StaleAwareCacheBudgetTests` |
 | Caller cancels during the fetch → cancellation propagates and nothing is cached | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Caller cancels while the source throws → cancellation still propagates | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Expected unavailability → is not logged as an error | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Last good past its retention → is not served | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Partial answer to another query sharing the fallback → replaces the last good | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Partial answer to the same query → does not replace a complete last good | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Partial result → is kept as last good and served stale with its data | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Queries sharing a fallback key → serve each others last good | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Source recovers → fresh value replaces stale and becomes the new last good | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Stampede → one waiting caller cancels → the others still get the value | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Stampede → while the source fails with history → one upstream call and every caller gets stale | failure | ✅ | `StaleAwareCacheFailureTests` |
@@ -290,12 +308,16 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Weather → missing hourly rows → returns partial | failure | ✅ | `LocationSourceTests` |
 | Weather → server error → returns unavailable | failure | ✅ | `LocationSourceTests` |
 | Caller cancels → cancellation propagates instead of a failed outcome | failure | ✅ | `OpenMeteoHttpTests` |
+| Expected failure → is logged on one line → without the stack trace (4 cases) | failure | ✅ | `OpenMeteoHttpTests` |
 | Timeout not caused by the caller → is a failed outcome | failure | ✅ | `OpenMeteoHttpTests` |
+| Unexpected failure → keeps the exception | failure | ✅ | `OpenMeteoHttpTests` |
 | Fetch → bad request → returns no data | failure | ✅ | `OpenMeteoLocationClientTests` |
 | Fetch → malformed json → returns unavailable | failure | ✅ | `OpenMeteoLocationClientTests` |
 | Fetch → missing current field → with hourly → returns partial | failure | ✅ | `OpenMeteoLocationClientTests` |
 | Fetch → missing hourly rows → returns partial | failure | ✅ | `OpenMeteoLocationClientTests` |
+| Fetch → no readable hourly time → returns unavailable → so the last good value is served | failure | ✅ | `OpenMeteoLocationClientTests` |
 | Fetch → nothing usable → returns no data | failure | ✅ | `OpenMeteoLocationClientTests` |
+| Fetch → one unreadable hourly time → skips that row → and returns partial (5 cases) | failure | ✅ | `OpenMeteoLocationClientTests` |
 | Fetch → server error → returns unavailable | failure | ✅ | `OpenMeteoLocationClientTests` |
 
 ## R8: Documentation
@@ -306,6 +328,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Bearer scheme → with the mock enabled → points to mock login | success | ✅ | `OpenApiDocumentTests` |
 | City report parameters → have descriptions (5 cases) | success | ✅ | `OpenApiDocumentTests` |
 | City report summary → names every location api | success | ✅ | `OpenApiDocumentTests` |
+| Contract fields → have descriptions from the xml comments (9 cases) | success | ✅ | `OpenApiDocumentTests` |
 | Document → declares the bearer scheme without a global requirement | success | ✅ | `OpenApiDocumentTests` |
 | Mock login → is anonymous in the document | success | ✅ | `OpenApiDocumentTests` |
 | Protected operations → require bearer and document 401 and 403 (2 cases) | success | ✅ | `OpenApiDocumentTests` |
@@ -318,12 +341,15 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Different filters and sorts → reuse the source entries → but each gets its own response | success | ✅ | `CacheBehaviourTests` |
 | Different request shapes → do not share an entry | success | ✅ | `CacheBehaviourTests` |
 | Ttls apply per source → only the expired source is refetched | success | ✅ | `CacheBehaviourTests` |
+| City name ending in a cache marker → does not read another citys entry | success | ✅ | `CacheKeyApiTests` |
 | In memory cache size → is limited from configuration (2 cases) | success | ✅ | `CacheLimitApiTests` |
 | Unknown city → is checked again after the not found lifetime | success | ✅ | `CacheLimitApiTests` |
 | Simultaneous identical requests → call each api once | success | ✅ | `CacheStampedeTests` |
 | City report → second request → is served from cache | success | ✅ | `CityReportApiTests` |
 | Geocoding query → another city or country → has another key (3 cases) | success | ✅ | `CacheKeyTests` |
+| Location query → fallback key → ignores only the window start | success | ✅ | `CacheKeyTests` |
 | Location query → requests that differ → have different keys → and equal keys mean equal requests | success | ✅ | `CacheKeyTests` |
+| Other queries → fall back on their own key | success | ✅ | `CacheKeyTests` |
 | No data → is kept only for its shorter lifetime | success | ✅ | `CacheLimitTests` |
 | Normal lifetime → applies to answers with data → or without a shorter no data lifetime (2 cases) | success | ✅ | `CacheLimitTests` |
 | Geocoding → uses the standard ttl | success | ✅ | `CachePolicyTests` |
@@ -338,6 +364,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Fetch → same query in another case → calls the source once | success | ✅ | `CachingSourceTests` |
 | Fetch → same query through different sources → is cached separately | success | ✅ | `CachingSourceTests` |
 | Name → is the inner source name | success | ✅ | `CachingSourceTests` |
+| Budget ends for one caller → the shared fetch carries on for the others | success | ✅ | `StaleAwareCacheBudgetTests` |
 | Get → cache hits → share one immutable instance | success | ✅ | `StaleAwareCacheTests` |
 | Get → fresh value → is fetched once | success | ✅ | `StaleAwareCacheTests` |
 | Get → no data → is cached like any answer | success | ✅ | `StaleAwareCacheTests` |
@@ -346,6 +373,8 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Geocoding query → key ignores the case of the city | success | ✅ | `HourlyWindowTests` |
 | Location query → rounds coordinates once for key and request | success | ✅ | `HourlyWindowTests` |
 | One source fails → the others keep serving their own cached entries | failure | ✅ | `CacheBehaviourTests` |
+| City name ending in a cache marker → cannot plant a fallback for another city | failure | ✅ | `CacheKeyApiTests` |
+| City name ending in a cache marker → does not overwrite another citys fallback | failure | ✅ | `CacheKeyApiTests` |
 | Failing api → is not called again during the cooldown | failure | ✅ | `CacheLimitApiTests` |
 | Simultaneous identical requests while an api is down → do not flood it | failure | ✅ | `CacheStampedeTests` |
 | Geocoding down with cached coordinates → returns 200 with geocoding stale | failure | ✅ | `ResilienceTests` |
@@ -357,11 +386,18 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Without a cooldown → every request calls the source | failure | ✅ | `CacheLimitTests` |
 | Full weather graph → survives the last good path through the shared store | failure | ✅ | `CacheRoundTripTests` |
 | Serving stale → does not extend the last good retention | failure | ✅ | `CacheRoundTripTests` |
+| Fetch → source down when the hourly window moves → serves the previous window as stale | failure | ✅ | `CachingSourceTests` |
+| Caller cancels within the budget → cancellation propagates | failure | ✅ | `StaleAwareCacheBudgetTests` |
+| Source slower than the budget → with history → is stale when the budget ends | failure | ✅ | `StaleAwareCacheBudgetTests` |
+| Source slower than the budget → without history → is unavailable → and starts no cooldown | failure | ✅ | `StaleAwareCacheBudgetTests` |
 | Caller cancels during the fetch → cancellation propagates and nothing is cached | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Caller cancels while the source throws → cancellation still propagates | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Expected unavailability → is not logged as an error | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Last good past its retention → is not served | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Partial answer to another query sharing the fallback → replaces the last good | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Partial answer to the same query → does not replace a complete last good | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Partial result → is kept as last good and served stale with its data | failure | ✅ | `StaleAwareCacheFailureTests` |
+| Queries sharing a fallback key → serve each others last good | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Source recovers → fresh value replaces stale and becomes the new last good | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Stampede → one waiting caller cancels → the others still get the value | failure | ✅ | `StaleAwareCacheFailureTests` |
 | Stampede → while the source fails with history → one upstream call and every caller gets stale | failure | ✅ | `StaleAwareCacheFailureTests` |
@@ -380,6 +416,8 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Scenario | Type | Result | Test |
 |---|---|---|---|
 | Concurrency limit → never exceeds the permits per api | success | ✅ | `ResilienceTests` |
+| One request → keeps at most max concurrent places in flight → below the permits (2 cases) | success | ✅ | `ResilienceTests` |
+| Get → keeps at most the configured number of places in flight (2 cases) | success | ✅ | `CityReportServiceConcurrencyTests` |
 | Get → starts every location call before any completes | success | ✅ | `CityReportServiceConcurrencyTests` |
 | Get → starts no location call before geocoding completes | success | ✅ | `CityReportServiceConcurrencyTests` |
 | Concurrency queue full → rejected places are unavailable but the request succeeds | failure | ✅ | `ResilienceTests` |
@@ -390,6 +428,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |---|---|---|---|
 | Statistics → after calls → reports every api | success | ✅ | `CityReportApiTests` |
 | Hazards calls → are counted in the statistics | success | ✅ | `HazardsApiTests` |
+| Anomaly state → is listed per api → and uses only complete minutes | success | ✅ | `StatisticsApiTests` |
 | Before any call → every api is listed with null averages | success | ✅ | `StatisticsApiTests` |
 | Cache hits → are not counted | success | ✅ | `StatisticsApiTests` |
 | Retries → are counted as separate attempts | success | ✅ | `StatisticsApiTests` |
@@ -399,8 +438,9 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Response → is recorded as succeeded (2 cases) | success | ✅ | `StatisticsHandlerTests` |
 | Statistics → fast threshold not above slow → is valid (2 cases) | success | ✅ | `StatisticsOptionsValidatorTests` |
 | Monitored apis → are listed before their first call → without averages | success | ✅ | `StatisticsStoreTests` |
-| Recent → only counts the requested minutes | success | ✅ | `StatisticsStoreTests` |
+| Recent → the minute in progress → is kept out of the window | success | ✅ | `StatisticsStoreTests` |
 | Recent → unknown api → is empty | success | ✅ | `StatisticsStoreTests` |
+| Recent → window holds only the requested complete minutes | success | ✅ | `StatisticsStoreTests` |
 | Record → groups durations into buckets | success | ✅ | `StatisticsStoreTests` |
 | Record → parallel writers → loses no updates | success | ✅ | `StatisticsStoreTests` |
 | Snapshot → keeps apis separate and ordered | success | ✅ | `StatisticsStoreTests` |
@@ -420,6 +460,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Valid hand made token → returns 200 | success | ✅ | `AuthTests` |
 | Health → is anonymous | success | ✅ | `CityReportApiTests` |
 | Optional endpoints → when disabled → are not mapped | success | ✅ | `CityReportApiTests` |
+| Entra shaped token → from the configured authority → returns 200 | success | ✅ | `IdentityProviderTests` |
 | Bearer scheme → with the mock disabled → does not mention mock login | success | ✅ | `OpenApiDocumentTests` |
 | Bearer scheme → with the mock enabled → points to mock login | success | ✅ | `OpenApiDocumentTests` |
 | Document → declares the bearer scheme without a global requirement | success | ✅ | `OpenApiDocumentTests` |
@@ -435,6 +476,9 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | City report → token without role → returns 403 | failure | ✅ | `CityReportApiTests` |
 | City report → without token → returns 401 | failure | ✅ | `CityReportApiTests` |
 | Mock login → unknown user → returns 400 | failure | ✅ | `CityReportApiTests` |
+| Token for another audience → returns 401 | failure | ✅ | `IdentityProviderTests` |
+| Token signed with another algorithm → returns 401 | failure | ✅ | `IdentityProviderTests` |
+| Token signed with the mock key → returns 401 → and mock login is not mapped | failure | ✅ | `IdentityProviderTests` |
 | Validate → mock disabled without authority → fails (2 cases) | failure | ✅ | `AuthOptionsValidatorTests` |
 | Validate → mock disabled → non https or relative authority → fails (2 cases) | failure | ✅ | `AuthOptionsValidatorTests` |
 
@@ -442,49 +486,57 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 | Scenario | Type | Result | Test |
 |---|---|---|---|
-| Tick → no anomalies → runs the detector and logs nothing | success | ✅ | `AnomalyBackgroundServiceTests` |
-| Tick → with anomaly → logs warning | success | ✅ | `AnomalyBackgroundServiceTests` |
-| Detect → increase at least the minimum → is reported (2 cases) | success | ✅ | `AnomalyDetectorTests` |
-| Detect → no baseline yet → reports nothing | success | ✅ | `AnomalyDetectorTests` |
-| Detect → recent average above threshold → reports anomaly | success | ✅ | `AnomalyDetectorTests` |
-| Detect → recent average within threshold → reports nothing | success | ✅ | `AnomalyDetectorTests` |
-| Detect → relatively slower but only by milliseconds → reports nothing | success | ✅ | `AnomalyDetectorTests` |
-| Detect → too few recent samples → reports nothing | success | ✅ | `AnomalyDetectorTests` |
-| Detect → without minimum increase → uses the ratio alone | success | ✅ | `AnomalyDetectorTests` |
+| Anomaly state → is listed per api → and uses only complete minutes | success | ✅ | `StatisticsApiTests` |
+| Anomaly ends → logs one information (2 cases) | success | ✅ | `AnomalyBackgroundServiceTests` |
+| Anomaly returns → is logged again | success | ✅ | `AnomalyBackgroundServiceTests` |
+| Lasting anomaly → logs one warning | success | ✅ | `AnomalyBackgroundServiceTests` |
+| No anomalies → runs the detector and logs nothing | success | ✅ | `AnomalyBackgroundServiceTests` |
+| Assess → baseline → leaves out the window and the minute in progress | success | ✅ | `AnomalyDetectorTests` |
+| Assess → increase at least the minimum → is anomalous (2 cases) | success | ✅ | `AnomalyDetectorTests` |
+| Assess → monitored api without calls → is listed without averages | success | ✅ | `AnomalyDetectorTests` |
+| Assess → no baseline yet → is insufficient data | success | ✅ | `AnomalyDetectorTests` |
+| Assess → recent average above threshold → is anomalous | success | ✅ | `AnomalyDetectorTests` |
+| Assess → recent average within threshold → is normal | success | ✅ | `AnomalyDetectorTests` |
+| Assess → relatively slower but only by milliseconds → is normal | success | ✅ | `AnomalyDetectorTests` |
+| Assess → the minute in progress → counts only once it is complete | success | ✅ | `AnomalyDetectorTests` |
+| Assess → too few recent samples → is insufficient data | success | ✅ | `AnomalyDetectorTests` |
+| Assess → without minimum increase → uses the ratio alone | success | ✅ | `AnomalyDetectorTests` |
 | Anomaly → defaults → are valid | success | ✅ | `StatisticsOptionsValidatorTests` |
-| Tick → detector throws → logs error and keeps running | failure | ✅ | `AnomalyBackgroundServiceTests` |
+| Detector throws → logs error and keeps running | failure | ✅ | `AnomalyBackgroundServiceTests` |
 | Anomaly → history shorter than window plus current minute → fails (2 cases) | failure | ✅ | `StatisticsOptionsValidatorTests` |
 | Anomaly → interval longer than window → fails | failure | ✅ | `StatisticsOptionsValidatorTests` |
 
 ## Code coverage
+
+Unit and integration tests combined. Code generated at build time (files under `obj/`: `[LoggerMessage]` logging and the OpenAPI XML-comment transformers) is excluded.
 
 ### Summary
 <details open><summary>Summary</summary>
 
 |||
 |:---|:---|
-| Generated on: | 11/16/2026 - 21:01:41 |
+| Generated on: | 11/16/2026 - 22:11:57 |
 | Parser: | MultiReport (2x Cobertura) |
 | Assemblies: | 3 |
-| Classes: | 147 |
-| Files: | 124 |
-| **Line coverage:** | 92.2% (2015 of 2185) |
-| Covered lines: | 2015 |
-| Uncovered lines: | 170 |
-| Coverable lines: | 2185 |
-| Total lines: | 3574 |
-| **Branch coverage:** | 80.5% (979 of 1215) |
-| Covered branches: | 979 |
-| Total branches: | 1215 |
+| Classes: | 146 |
+| Files: | 126 |
+| **Line coverage:** | 99.6% (1777 of 1784) |
+| Covered lines: | 1777 |
+| Uncovered lines: | 7 |
+| Coverable lines: | 1784 |
+| Total lines: | 3098 |
+| **Branch coverage:** | 94.4% (957 of 1013) |
+| Covered branches: | 957 |
+| Total branches: | 1013 |
 
 </details>
 
 #### Coverage
-<details><summary>Aggregator.Api - 82.5%</summary>
+<details><summary>Aggregator.Api - 99.4%</summary>
 
 |**Name**|**Line**|**Branch**|
 |:---|---:|---:|
-|**Aggregator.Api**|**82.5%**|**67.1%**|
+|**Aggregator.Api**|**99.4%**|**97.6%**|
 |Aggregator.Api.Auth.AuthOptions|100%||
 |Aggregator.Api.Auth.AuthOptionsValidator|100%|100%|
 |Aggregator.Api.Auth.AuthRegistration|100%|100%|
@@ -499,6 +551,8 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |Aggregator.Api.Composition.BearerSecurityTransformer|100%|83.3%|
 |Aggregator.Api.Composition.TelemetryRegistration|100%|100%|
 |Aggregator.Api.Contracts.AirQualityResponse|100%||
+|Aggregator.Api.Contracts.AnomalyResponse|100%||
+|Aggregator.Api.Contracts.AnomalyRulesResponse|100%||
 |Aggregator.Api.Contracts.ApiStatisticsResponse|100%||
 |Aggregator.Api.Contracts.BucketResponse|100%||
 |Aggregator.Api.Contracts.BucketThresholdsResponse|100%||
@@ -515,7 +569,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |Aggregator.Api.Contracts.PlaceResponse|100%||
 |Aggregator.Api.Contracts.RegionFilterResponse|100%||
 |Aggregator.Api.Contracts.SourceResponse|100%||
-|Aggregator.Api.Contracts.StatisticsMapper|100%|100%|
+|Aggregator.Api.Contracts.StatisticsMapper|96.4%|80%|
 |Aggregator.Api.Contracts.StatisticsResponse|100%||
 |Aggregator.Api.Contracts.TokenResponse|100%||
 |Aggregator.Api.Contracts.WeatherResponse|100%||
@@ -523,20 +577,15 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |Aggregator.Api.Endpoints.MockLoginEndpoints|100%|100%|
 |Aggregator.Api.Endpoints.StatisticsEndpoints|100%||
 |Aggregator.Api.ErrorHandling.BadRequestExceptionHandler|100%|100%|
-|Aggregator.Api.Hosting.AnomalyBackgroundService|97.2%|80%|
-|Microsoft.AspNetCore.OpenApi.Generated|44.9%|32%|
+|Aggregator.Api.Hosting.AnomalyBackgroundService|96.1%|100%|
 |Program|100%|100%|
-|System.Runtime.CompilerServices|0%||
-|System.Text.RegularExpressions.Generated|78.9%|73.6%|
-|System.Text.RegularExpressions.Generated.RunnerFactory|||
-|System.Text.RegularExpressions.Generated.RunnerFactory.Runner|||
 
 </details>
 <details><summary>Aggregator.Core - 99.6%</summary>
 
 |**Name**|**Line**|**Branch**|
 |:---|---:|---:|
-|**Aggregator.Core**|**99.6%**|**94.2%**|
+|**Aggregator.Core**|**99.6%**|**94.9%**|
 |Aggregator.Core.CityReports.CityReport|100%||
 |Aggregator.Core.CityReports.CityReportOptions|100%||
 |Aggregator.Core.CityReports.CityReportOptionsValidator|100%|100%|
@@ -545,6 +594,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |Aggregator.Core.CityReports.CityReportOutcome.HourlyRangeOutsideWindow|100%||
 |Aggregator.Core.CityReports.CityReportRequest|100%||
 |Aggregator.Core.CityReports.CityReportService|100%|98.3%|
+|Aggregator.Core.CityReports.CityReportService<TItem>|100%|98.3%|
 |Aggregator.Core.CityReports.CityReportService<TResult>|100%|98.3%|
 |Aggregator.Core.CityReports.HourlyFilter|100%|100%|
 |Aggregator.Core.CityReports.HourlyOptions|100%||
@@ -578,46 +628,48 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |Aggregator.Core.Query.RegionMatchingOptions|100%||
 |Aggregator.Core.Sources.AreaQuery|100%||
 |Aggregator.Core.Sources.GeocodingQuery|100%||
+|Aggregator.Core.Sources.ISourceQuery|100%||
 |Aggregator.Core.Sources.LocationQuery|100%|100%|
 |Aggregator.Core.Statistics.AnomalyDetector|100%|100%|
 |Aggregator.Core.Statistics.AnomalyOptions|100%||
 |Aggregator.Core.Statistics.AnomalyOptionsValidator|100%|100%|
+|Aggregator.Core.Statistics.ApiPerformance|100%||
 |Aggregator.Core.Statistics.ApiStatisticsSnapshot|100%||
 |Aggregator.Core.Statistics.BucketSnapshot|100%||
 |Aggregator.Core.Statistics.MonitoredApi|100%||
-|Aggregator.Core.Statistics.PerformanceAnomaly|100%||
+|Aggregator.Core.Statistics.RecentActivity|100%||
 |Aggregator.Core.Statistics.StatisticsOptions|100%||
 |Aggregator.Core.Statistics.StatisticsOptionsValidator|100%|100%|
-|Aggregator.Core.Statistics.StatisticsStore|100%|97.3%|
+|Aggregator.Core.Statistics.StatisticsStore|100%|97.5%|
 |Aggregator.Core.Statistics.StatisticsStore.ApiStatistics|100%|100%|
 |Aggregator.Core.Statistics.StatisticsStore.MinuteSlot|100%||
 |Aggregator.Core.Statistics.StatisticsStore.Totals|100%|100%|
 |Aggregator.Core.Statistics.WindowSample|100%|50%|
 
 </details>
-<details><summary>Aggregator.Infrastructure - 99.4%</summary>
+<details><summary>Aggregator.Infrastructure - 99.6%</summary>
 
 |**Name**|**Line**|**Branch**|
 |:---|---:|---:|
-|**Aggregator.Infrastructure**|**99.4%**|**87.5%**|
+|**Aggregator.Infrastructure**|**99.6%**|**92.1%**|
 |Aggregator.Infrastructure.Caching.AreaCachePolicy|100%||
 |Aggregator.Infrastructure.Caching.CacheTelemetry|100%||
 |Aggregator.Infrastructure.Caching.CacheTimes|100%||
-|Aggregator.Infrastructure.Caching.CachingLog|100%|75%|
 |Aggregator.Infrastructure.Caching.CachingSource<TQuery, TResult>|100%|100%|
 |Aggregator.Infrastructure.Caching.CachingSource<TQuery, TResult>|100%|50%|
 |Aggregator.Infrastructure.Caching.GeocodingCachePolicy|100%||
+|Aggregator.Infrastructure.Caching.LastGood<T>|100%||
 |Aggregator.Infrastructure.Caching.LocationCachePolicy|100%|87.5%|
 |Aggregator.Infrastructure.Caching.SourceUnavailableException|100%||
-|Aggregator.Infrastructure.Caching.StaleAwareCache|97.9%|100%|
-|Aggregator.Infrastructure.Caching.StaleAwareCache<T>|97.9%|100%|
-|Aggregator.Infrastructure.Eonet.HazardsLog|100%|66.6%|
-|Aggregator.Infrastructure.Eonet.HazardsSource|98.3%|87%|
+|Aggregator.Infrastructure.Caching.StaleAwareCache|100%|100%|
+|Aggregator.Infrastructure.Caching.StaleAwareCache<T>|100%|100%|
+|Aggregator.Infrastructure.Eonet.HazardsSource|98.3%|87.5%|
 |Aggregator.Infrastructure.Eonet.HazardsSource.CategoryItem|100%||
 |Aggregator.Infrastructure.Eonet.HazardsSource.EventItem|100%||
 |Aggregator.Infrastructure.Eonet.HazardsSource.EventsResponse|100%||
 |Aggregator.Infrastructure.Eonet.HazardsSource.GeometryItem|100%||
 |Aggregator.Infrastructure.Eonet.HazardsSource.Sighting|100%||
+|Aggregator.Infrastructure.Http.ExpectedFailure|100%|100%|
 |Aggregator.Infrastructure.Http.ExternalApiMetrics|100%||
 |Aggregator.Infrastructure.Http.StatisticsHandler|100%|100%|
 |Aggregator.Infrastructure.InfrastructureServiceCollectionExtensions|100%|100%|
@@ -626,17 +678,16 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |Aggregator.Infrastructure.OpenMeteo.GeocodingSource|100%|90%|
 |Aggregator.Infrastructure.OpenMeteo.GeocodingSource.GeocodingResponse|100%||
 |Aggregator.Infrastructure.OpenMeteo.GeocodingSource.GeocodingResult|100%||
-|Aggregator.Infrastructure.OpenMeteo.HourlySeries|93.7%|83.3%|
+|Aggregator.Infrastructure.OpenMeteo.HourlySeries|93.3%|85%|
 |Aggregator.Infrastructure.OpenMeteo.MarineSource|100%|100%|
 |Aggregator.Infrastructure.OpenMeteo.MetricSeries|100%||
 |Aggregator.Infrastructure.OpenMeteo.OpenMeteoEndpoint|100%|100%|
 |Aggregator.Infrastructure.OpenMeteo.OpenMeteoError|100%||
-|Aggregator.Infrastructure.OpenMeteo.OpenMeteoHttp|100%|66.6%|
-|Aggregator.Infrastructure.OpenMeteo.OpenMeteoHttp<T>|100%|66.6%|
-|Aggregator.Infrastructure.OpenMeteo.OpenMeteoLocationClient|100%|85.4%|
+|Aggregator.Infrastructure.OpenMeteo.OpenMeteoHttp|100%|83.3%|
+|Aggregator.Infrastructure.OpenMeteo.OpenMeteoHttp<T>|100%|83.3%|
+|Aggregator.Infrastructure.OpenMeteo.OpenMeteoLocationClient|100%|88.8%|
 |Aggregator.Infrastructure.OpenMeteo.OpenMeteoLocationClient.LocationRespons<br/>e|100%||
-|Aggregator.Infrastructure.OpenMeteo.OpenMeteoLocationClient<TCurrent, TResu<br/>lt>|100%|85.4%|
-|Aggregator.Infrastructure.OpenMeteo.OpenMeteoLog|100%|75%|
+|Aggregator.Infrastructure.OpenMeteo.OpenMeteoLocationClient<TCurrent, TResu<br/>lt>|100%|88.8%|
 |Aggregator.Infrastructure.OpenMeteo.OpenMeteoResponse<T>|100%||
 |Aggregator.Infrastructure.OpenMeteo.OpenMeteoSeries|100%||
 |Aggregator.Infrastructure.OpenMeteo.PivotResult|100%||

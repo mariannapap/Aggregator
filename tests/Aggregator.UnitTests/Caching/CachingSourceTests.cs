@@ -93,9 +93,31 @@ public sealed class CachingSourceTests : IDisposable
     }
 
     [Fact]
+    [Requirement("R6"), FailureScenario]
+    public async Task FetchAsync_SourceDownWhenTheHourlyWindowMoves_ServesThePreviousWindowAsStale()
+    {
+        var cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>(), TimeProvider.System, NullLogger<StaleAwareCache>.Instance);
+        var weatherInner = new NamedWeatherSource(SourceNames.Weather, 18);
+        var weather = new CachingSource<LocationQuery, Weather>(
+            weatherInner, cache, new LocationCachePolicy(), new StaticOptionsMonitor(new SourceClientOptions { LastGoodRetention = TimeSpan.FromHours(24) }));
+        var start = new DateTimeOffset(2026, 11, 16, 10, 0, 0, TimeSpan.Zero);
+
+        await weather.FetchAsync(HourlyQuery(start), Ct);
+        weatherInner.Down = true;
+        var nextHour = await weather.FetchAsync(HourlyQuery(start.AddHours(1)), Ct);
+
+        Assert.Equal(2, weatherInner.Calls);
+        Assert.Equal(SourceStatus.Stale, nextHour.Status);
+        Assert.Equal(18, nextHour.Value!.Current!.Temperature);
+    }
+
+    [Fact]
     public void Name_IsTheInnerSourceName() => Assert.Equal(SourceNames.Geocoding, CreateSource().Name);
 
     public void Dispose() => provider.Dispose();
+
+    private static LocationQuery HourlyQuery(DateTimeOffset start) =>
+        new(new Coordinates(37.98, 23.73), 2, includeCurrent: true, new HourlyWindow(start, 24));
 
     private CachingSource<GeocodingQuery, IReadOnlyList<Place>> CreateSource() =>
         new(
@@ -137,12 +159,14 @@ public sealed class CachingSourceTests : IDisposable
     {
         public int Calls { get; private set; }
 
+        public bool Down { get; set; }
+
         public string Name => name;
 
         public Task<SourceResult<Weather>> FetchAsync(LocationQuery query, CancellationToken cancellationToken)
         {
             Calls++;
-            return Task.FromResult(SourceResult.Ok(new Weather(new CurrentWeather(temperature, 1), [])));
+            return Task.FromResult(Down ? SourceResult.Unavailable<Weather>() : SourceResult.Ok(new Weather(new CurrentWeather(temperature, 1), [])));
         }
     }
 

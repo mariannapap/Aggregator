@@ -1,5 +1,8 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.IntegrationTests;
 
@@ -76,6 +79,49 @@ public sealed class StatisticsApiTests
 
         Assert.All(AllApis, api => Assert.Equal(Count(afterFirst, api, "totalRequests"), Count(afterSecond, api, "totalRequests")));
         Assert.Equal(2, Count(afterSecond, "weather", "totalRequests"));
+    }
+
+    [Fact]
+    [Requirement("O2")]
+    public async Task AnomalyState_IsListedPerApi_AndUsesOnlyCompleteMinutes()
+    {
+        await using var factory = new AggregatorApiFactory();
+        factory.OpenMeteo.GeneratedPlaces = 1;
+        var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var client = await factory
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("Anomaly:WindowMinutes", "1");
+                builder.UseSetting("Anomaly:MinSamples", "3");
+                builder.UseSetting("Statistics:RecentMinutesKept", "3");
+                builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(time));
+            })
+            .CreateAuthorizedClientAsync();
+
+        var beforeAnyCall = await client.GetJsonAsync("/stats");
+        await GeocodeUniqueCitiesAsync(client, 3);
+        time.Advance(TimeSpan.FromMinutes(1));
+        await GeocodeUniqueCitiesAsync(client, 3);
+        var whileTheMinuteRuns = Anomaly(await client.GetJsonAsync("/stats"), "geocoding");
+        time.Advance(TimeSpan.FromMinutes(1));
+        var stats = await client.GetJsonAsync("/stats");
+        var geocoding = Anomaly(stats, "geocoding");
+
+        Assert.All(AllApis, api => Assert.Equal(
+            """{"state":"insufficient_data","recentRequests":0,"recentAverageMs":null,"baselineRequests":0,"baselineAverageMs":null}""",
+            Anomaly(beforeAnyCall, api).GetRawText()));
+        // Minute M is the complete window and nothing came before it; the three calls of the minute in progress are in neither.
+        Assert.Equal(("insufficient_data", 3, 0), (whileTheMinuteRuns.GetProperty("state").GetString(), whileTheMinuteRuns.GetProperty("recentRequests").GetInt64(), whileTheMinuteRuns.GetProperty("baselineRequests").GetInt64()));
+        Assert.Equal(("normal", 3, 3), (geocoding.GetProperty("state").GetString(), geocoding.GetProperty("recentRequests").GetInt64(), geocoding.GetProperty("baselineRequests").GetInt64()));
+        Assert.Equal(1, stats.GetProperty("anomalyRules").GetProperty("windowMinutes").GetInt32());
+    }
+
+    private static JsonElement Anomaly(JsonElement stats, string api) => stats.GetProperty("apis").GetProperty(api).GetProperty("anomaly");
+
+    private static async Task GeocodeUniqueCitiesAsync(HttpClient client, int count)
+    {
+        for (var city = 0; city < count; city++)
+            await client.GetJsonAsync($"/city-report/GR/Anomaly{Guid.NewGuid():N}?include=weather");
     }
 
     private static long Count(JsonElement stats, string api, string counter) =>

@@ -4,8 +4,11 @@ namespace Aggregator.Infrastructure.OpenMeteo;
 
 internal static partial class OpenMeteoLog
 {
-    [LoggerMessage(EventId = 2001, Level = LogLevel.Warning, Message = "Call to {Source} failed")]
-    public static partial void CallFailed(this ILogger logger, string source, Exception exception);
+    [LoggerMessage(EventId = 2001, Level = LogLevel.Warning, Message = "Call to {Source} failed unexpectedly")]
+    public static partial void CallFailedUnexpectedly(this ILogger logger, string source, Exception exception);
+
+    [LoggerMessage(EventId = 2006, Level = LogLevel.Warning, Message = "Call to {Source} failed: {Reason}")]
+    public static partial void CallFailed(this ILogger logger, string source, string reason);
 
     [LoggerMessage(EventId = 2002, Level = LogLevel.Warning, Message = "{Source} rejected the request: {Reason}")]
     public static partial void RequestRejected(this ILogger logger, string source, string? reason);
@@ -15,4 +18,7 @@ internal static partial class OpenMeteoLog
 
     [LoggerMessage(EventId = 2004, Level = LogLevel.Warning, Message = "{Source} returned {Count} result(s) without coordinates; they were skipped")]
     public static partial void ResultsWithoutCoordinates(this ILogger logger, string source, int count);
+
+    [LoggerMessage(EventId = 2005, Level = LogLevel.Warning, Message = "{Source} returned no hourly time in the expected format; the response was treated as a failure")]
+    public static partial void UnreadableHourlyTimes(this ILogger logger, string source);
 }

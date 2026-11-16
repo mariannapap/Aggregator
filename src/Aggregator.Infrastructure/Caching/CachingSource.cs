@@ -23,6 +23,7 @@ internal sealed class CachingSource<TQuery, TResult>(
         var caller = Activity.Current?.Context ?? default;
         return cache.GetAsync(
             key,
+            $"{inner.Name}|{query.FallbackKey}",
             async token =>
             {
                 // HybridCache runs the shared fetch without the caller's context; this span reconnects it to the caller's trace.
@@ -30,7 +31,7 @@ internal sealed class CachingSource<TQuery, TResult>(
                 activity?.SetTag("cache.key", key);
                 return await inner.FetchAsync(query, token);
             },
-            new CacheTimes(policy.FreshFor(query, settings), settings.LastGoodRetention, settings.NoDataCacheTtl, settings.FailureCooldown),
+            new CacheTimes(policy.FreshFor(query, settings), settings.LastGoodRetention, settings.NoDataCacheTtl, settings.FailureCooldown, settings.CallBudget),
             cancellationToken);
     }
 }

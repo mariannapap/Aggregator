@@ -1,15 +1,18 @@
 namespace Aggregator.EndToEndTests;
 
+// Compose settings: 1-minute window, 10 s analysis interval, 3 samples minimum.
+// Baseline requests in minute M, slow ones in M + 1; the slow minute counts once it is complete, i.e. during M + 2.
 [Trait("Duration", "Long")]
 public sealed class AnomalyDetectionTests
 {
-    private const string Warning = "Performance anomaly for weather";
+    private const string Warning = "Performance anomaly for weather:";
     private static readonly TimeSpan SlowResponse = TimeSpan.FromMilliseconds(700);
+    private static readonly TimeSpan AnalysisInterval = TimeSpan.FromSeconds(10);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task WeatherSlowsDown_TheBackgroundServiceLogsAnAnomaly()
+    public async Task WeatherSlowsDown_StatsShowItAnomalous_AndTheWarningIsLoggedOnce()
     {
         using var wireMock = new WireMockAdmin();
         using var session = await ApiSession.LoginAsync();
@@ -25,9 +28,15 @@ public sealed class AnomalyDetectionTests
             for (var request = 0; request < 6; request++)
                 await session.GetReportPlaceAsync(E2EEnvironment.UniqueCity("Slow"));
 
-            var logged = await WaitForLogAsync(linesBefore, TimeSpan.FromSeconds(30));
+            var anomalous = await WaitForAsync(async () => await session.AnomalyStateAsync("weather") == "anomalous", TimeSpan.FromSeconds(90));
+            var logged = await WaitForAsync(() => Task.FromResult(WarningsSince(linesBefore) > 0), TimeSpan.FromSeconds(30));
 
+            // Several analysis runs later the API is still anomalous, but the warning is not repeated.
+            await Task.Delay(AnalysisInterval * 2.5, Ct);
+
+            Assert.True(anomalous, "/stats never reported weather as anomalous within 90 s.");
             Assert.True(logged, $"No '{Warning}' line was logged within 30 s.");
+            Assert.Equal(1, WarningsSince(linesBefore));
         }
         finally
         {
@@ -42,18 +51,21 @@ public sealed class AnomalyDetectionTests
         await Task.Delay(next - now, Ct);
     }
 
-    private static async Task<bool> WaitForLogAsync(int skipLines, TimeSpan timeout)
+    private static async Task<bool> WaitForAsync(Func<Task<bool>> condition, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
-            if (ReadLogLines().Skip(skipLines).Any(line => line.Contains(Warning, StringComparison.Ordinal)))
+            if (await condition())
                 return true;
             await Task.Delay(TimeSpan.FromSeconds(1), Ct);
         }
 
         return false;
     }
+
+    private static int WarningsSince(int skipLines) =>
+        ReadLogLines().Skip(skipLines).Count(line => line.Contains(Warning, StringComparison.Ordinal));
 
     private static List<string> ReadLogLines()
     {

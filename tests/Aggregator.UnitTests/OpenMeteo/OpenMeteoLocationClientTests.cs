@@ -68,6 +68,32 @@ public sealed class OpenMeteoLocationClientTests
         Assert.Equal(40, result.Value!.Hourly.Count);
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("1763218800")]
+    [InlineData("\"2026-11-15 18:00\"")]
+    [InlineData("\"15/11/2026 18:00\"")]
+    [InlineData("{}")]
+    [Requirement("R6"), FailureScenario]
+    public async Task FetchAsync_OneUnreadableHourlyTime_SkipsThatRow_AndReturnsPartial(string badTime)
+    {
+        var result = await Fetch(Json(current: """{"field_a":1.5,"field_b":2}""", hours: 24, timeAt: hour => hour == 3 ? badTime : null), Query(true, true));
+
+        Assert.Equal(SourceStatus.Partial, result.Status);
+        Assert.Equal(new TestCurrent(1.5, 2), result.Value!.Current);
+        Assert.Equal(23 * 2, result.Value.Hourly.Count);
+        Assert.DoesNotContain(result.Value.Hourly, reading => reading.Time == Window.Start.AddHours(3));
+    }
+
+    [Fact]
+    [Requirement("R6"), FailureScenario]
+    public async Task FetchAsync_NoReadableHourlyTime_ReturnsUnavailable_SoTheLastGoodValueIsServed()
+    {
+        var result = await Fetch(Json(current: """{"field_a":1.5,"field_b":2}""", hours: 24, timeAt: hour => $"\"2026-11-15 {hour:00}:00\""), Query(true, true));
+
+        Assert.Equal(SourceStatus.Unavailable, result.Status);
+    }
+
     [Fact]
     [Requirement("R6"), FailureScenario]
     public async Task FetchAsync_NothingUsable_ReturnsNoData()
@@ -122,9 +148,9 @@ public sealed class OpenMeteoLocationClientTests
             (current, hourly) => new TestResult(current, hourly),
             Ct);
 
-    private static string Json(string? current, int hours, string? units = null)
+    private static string Json(string? current, int hours, string? units = null, Func<int, string?>? timeAt = null)
     {
-        var times = string.Join(',', Enumerable.Range(0, hours).Select(hour => $"\"{OpenMeteoHttp.FormatHour(Window.Start.AddHours(hour))}\""));
+        var times = string.Join(',', Enumerable.Range(0, hours).Select(hour => timeAt?.Invoke(hour) ?? $"\"{OpenMeteoHttp.FormatHour(Window.Start.AddHours(hour))}\""));
         var values = string.Join(',', Enumerable.Range(0, hours).Select(hour => hour.ToString(CultureInfo.InvariantCulture)));
         var sections = new List<string> { $$"""
             "hourly":{"time":[{{times}}],"field_a":[{{values}}],"field_b":[{{values}}]}

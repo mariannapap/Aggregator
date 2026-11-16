@@ -51,6 +51,12 @@ public sealed class ApiSession : IDisposable
         return stats.GetProperty("apis").TryGetProperty(api, out var entry) ? entry.GetProperty("totalRequests").GetInt64() : 0;
     }
 
+    public async Task<string?> AnomalyStateAsync(string api)
+    {
+        var stats = await (await GetAsync("/stats")).Content.ReadFromJsonAsync<JsonElement>(Ct);
+        return stats.GetProperty("apis").TryGetProperty(api, out var entry) ? entry.GetProperty("anomaly").GetProperty("state").GetString() : null;
+    }
+
     public void Dispose() => client.Dispose();
 
     private async Task LoginAsync()

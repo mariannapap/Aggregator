@@ -26,7 +26,7 @@ public sealed class TelemetryTests
     [Fact]
     public async Task WithAnEndpoint_RequestsAreTraced_AndMetricsAreCollected()
     {
-        var exported = new List<Activity>();
+        var exported = new LockedCollection<Activity>();
         await using var factory = new AggregatorApiFactory();
         var app = WithTelemetry(factory, exported);
         var path = UniquePath();
@@ -40,7 +40,7 @@ public sealed class TelemetryTests
     [Fact]
     public async Task UpstreamFetches_StayInTheCallersTrace_DespiteTheSharedCacheFetch()
     {
-        var exported = new List<Activity>();
+        var exported = new LockedCollection<Activity>();
         await using var factory = new AggregatorApiFactory();
         var app = WithTelemetry(factory, exported);
         var path = UniquePath();
@@ -48,12 +48,12 @@ public sealed class TelemetryTests
         await (await app.CreateAuthorizedClientAsync()).GetJsonAsync($"{path}?include=weather");
 
         var request = await RequestSpanAsync(exported, path);
-        var fetches = Snapshot(exported).Where(span => span.TraceId == request!.TraceId && span.DisplayName.StartsWith("fetch ", StringComparison.Ordinal)).ToList();
+        var fetches = exported.Snapshot().Where(span => span.TraceId == request!.TraceId && span.DisplayName.StartsWith("fetch ", StringComparison.Ordinal)).ToList();
         Assert.Equal(["fetch geocoding", "fetch weather"], fetches.Select(span => span.DisplayName).Order(StringComparer.Ordinal));
         Assert.All(fetches, fetch => Assert.Equal(request!.SpanId, fetch.ParentSpanId));
     }
 
-    private static WebApplicationFactory<Program> WithTelemetry(AggregatorApiFactory factory, List<Activity> exported)
+    private static WebApplicationFactory<Program> WithTelemetry(AggregatorApiFactory factory, LockedCollection<Activity> exported)
     {
         factory.OpenMeteo.GeneratedPlaces = 1;
         return factory.WithWebHostBuilder(builder =>
@@ -66,12 +66,12 @@ public sealed class TelemetryTests
 
     private static string UniquePath() => $"/city-report/GR/Telemetry{Guid.NewGuid():N}";
 
-    private static async Task<Activity?> RequestSpanAsync(List<Activity> exported, string path)
+    private static async Task<Activity?> RequestSpanAsync(LockedCollection<Activity> exported, string path)
     {
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while (DateTime.UtcNow < deadline)
         {
-            var request = Snapshot(exported).FirstOrDefault(span =>
+            var request = exported.Snapshot().FirstOrDefault(span =>
                 span.Kind == ActivityKind.Server && span.GetTagItem("url.path") is string urlPath && urlPath == path);
             if (request is not null)
                 return request;
@@ -80,11 +80,5 @@ public sealed class TelemetryTests
 
         Assert.Fail($"No server span for {path}.");
         return null;
-    }
-
-    private static List<Activity> Snapshot(List<Activity> exported)
-    {
-        lock (exported)
-            return [.. exported];
     }
 }

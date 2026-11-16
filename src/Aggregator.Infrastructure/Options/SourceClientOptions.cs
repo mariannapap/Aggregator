@@ -25,4 +25,7 @@ internal sealed class SourceClientOptions
     // After a failure, serve the last good value without calling the API again for this long; zero always calls.
     [Range(typeof(TimeSpan), "00:00:00", "01:00:00")]
     public TimeSpan FailureCooldown { get; set; } = TimeSpan.FromSeconds(30);
+
+    // Not bound from configuration: copied from this client's Resilience:TotalRequestTimeout, so there is one budget to set.
+    public TimeSpan CallBudget { get; internal set; } = TimeSpan.FromSeconds(30);
 }

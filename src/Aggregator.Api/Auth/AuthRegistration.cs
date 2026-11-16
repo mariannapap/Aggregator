@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Aggregator.Api.Auth;
 
@@ -27,6 +28,7 @@ internal static class AuthRegistration
                 jwt.TokenValidationParameters.ValidAudience = settings.Audience;
                 jwt.TokenValidationParameters.ValidateLifetime = true;
                 jwt.TokenValidationParameters.ValidateIssuerSigningKey = true;
+                jwt.TokenValidationParameters.ValidAlgorithms = [SecurityAlgorithms.RsaSha256];
                 jwt.TokenValidationParameters.ClockSkew = settings.ClockSkew;
                 jwt.TokenValidationParameters.RoleClaimType = AuthClaims.Roles;
                 jwt.TokenValidationParameters.NameClaimType = JwtRegisteredClaimNames.Sub;

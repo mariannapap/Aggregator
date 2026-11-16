@@ -10,7 +10,7 @@ public sealed class SourceStatusApiTests
 {
     private const string Report = "/city-report/GR/Anywhere";
 
-    // Valid JSON, but the hourly time is not in Open-Meteo's yyyy-MM-ddTHH:mm format.
+    // Valid JSON, but no hourly time is in Open-Meteo's yyyy-MM-ddTHH:mm format, so the answer counts as a failure.
     private const string MalformedWeather =
         """{"current":{"temperature_2m":1,"wind_speed_10m":2},"hourly":{"time":["2026-11-15 15:00"],"temperature_2m":[1],"wind_speed_10m":[2]}}""";
 
@@ -28,6 +28,24 @@ public sealed class SourceStatusApiTests
         Assert.Equal("partial", place.SourceStatus("weather"));
         Assert.False(place.TryGetProperty("weather", out _));
         Assert.Equal(24 * 2, place.GetProperty("hourly").GetArrayLength());
+    }
+
+    [Fact]
+    [FailureScenario]
+    public async Task OneUnreadableHourlyTime_IsPartial_AndTheOtherRowsAreKept()
+    {
+        await using var factory = new AggregatorApiFactory();
+        factory.OpenMeteo.GeneratedPlaces = 1;
+        factory.OpenMeteo.ReplaceHourlyTime(OpenMeteoHosts.Weather, 5, "null");
+        var client = await factory.CreateAuthorizedClientAsync();
+
+        var response = await client.GetJsonAsync($"{Report}?include=weather,hourly&hourly.category=weather");
+        var place = response.GetProperty("places")[0];
+
+        Assert.Equal("partial", place.SourceStatus("weather"));
+        Assert.True(place.TryGetProperty("weather", out _));
+        Assert.Equal(23 * 2, place.GetProperty("hourly").GetArrayLength());
+        Assert.True(response.GetProperty("degraded").GetBoolean());
     }
 
     [Fact]

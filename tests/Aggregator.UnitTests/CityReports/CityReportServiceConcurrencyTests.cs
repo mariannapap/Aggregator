@@ -64,6 +64,33 @@ public sealed class CityReportServiceConcurrencyTests
         Assert.Equal(3 * ThreePlaces.Count, locationStarted.Count);
     }
 
+    // Relevance: each place in flight makes three calls at once. Temperature: the weather of every place comes first, one call per place.
+    [Theory]
+    [InlineData(PlaceSortField.Relevance, 3)]
+    [InlineData(PlaceSortField.Temperature, 1)]
+    public async Task GetAsync_KeepsAtMostTheConfiguredNumberOfPlacesInFlight(PlaceSortField sort, int callsPerPlace)
+    {
+        const int cap = 4;
+        var places = Enumerable.Range(0, 12).Select(index => new Place($"Place {index}", "GR", "Attica", new Coordinates(37 + index * 0.1, 23), "PPL")).ToList();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new StartCounter();
+        var service = CreateService(
+            new GatedSource<GeocodingQuery, IReadOnlyList<Place>>(SourceNames.Geocoding, null, null, () => SourceResult.Ok<IReadOnlyList<Place>>(places)),
+            new GatedSource<LocationQuery, Weather>(SourceNames.Weather, gate.Task, started, () => SourceResult.NoData<Weather>()),
+            new GatedSource<LocationQuery, AirQuality>(SourceNames.AirQuality, gate.Task, started, () => SourceResult.NoData<AirQuality>()),
+            new GatedSource<LocationQuery, Marine>(SourceNames.Marine, gate.Task, started, () => SourceResult.NoData<Marine>()),
+            new CityReportOptions { MaxConcurrentPlaces = cap });
+
+        var report = service.GetAsync(Request() with { Sort = new PlaceSort(sort, Descending: false) }, Ct);
+        Assert.True(await started.WaitForAsync(cap * callsPerPlace, Timeout));
+        await Task.Delay(100, Ct);
+
+        Assert.Equal(cap * callsPerPlace, started.Count);
+        gate.SetResult();
+        var found = Assert.IsType<CityReportOutcome.Found>(await report);
+        Assert.Equal(12, found.Report.Places.Count);
+    }
+
     private static CityReportRequest Request() =>
         new("Athens", "GR", ReportSectionsExtensions.DataSections, null, PlaceSort.Default, HourlyOptions.Default, new PlacePage(0, 100));
 
@@ -71,7 +98,8 @@ public sealed class CityReportServiceConcurrencyTests
         IExternalSource<GeocodingQuery, IReadOnlyList<Place>> geocoding,
         IExternalSource<LocationQuery, Weather> weather,
         IExternalSource<LocationQuery, AirQuality> airQuality,
-        IExternalSource<LocationQuery, Marine> marine) =>
+        IExternalSource<LocationQuery, Marine> marine,
+        CityReportOptions? options = null) =>
         new(
             geocoding,
             weather,
@@ -81,7 +109,7 @@ public sealed class CityReportServiceConcurrencyTests
             new RegionMatcher(Options.Create(new RegionMatchingOptions())),
             new DistanceCalculator(Options.Create(new DistanceOptions { ReferenceLatitude = 37.9715, ReferenceLongitude = 23.7257 })),
             new FakeTimeProvider(new DateTimeOffset(2026, 11, 15, 15, 20, 0, TimeSpan.Zero)),
-            Options.Create(new CityReportOptions()));
+            Options.Create(options ?? new CityReportOptions()));
 
     private sealed class UnusedHazards : IExternalSource<AreaQuery, Hazards>
     {

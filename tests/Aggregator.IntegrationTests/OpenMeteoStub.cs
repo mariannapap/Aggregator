@@ -13,7 +13,9 @@ public sealed class OpenMeteoStub : HttpMessageHandler
     private readonly ConcurrentDictionary<string, TimeSpan> delays = new();
     private readonly ConcurrentDictionary<string, Task> holds = new();
     private readonly ConcurrentDictionary<string, bool> down = new();
+    private readonly ConcurrentDictionary<string, bool> stalledBodies = new();
     private readonly ConcurrentDictionary<string, string> omittedCurrentFields = new();
+    private readonly ConcurrentDictionary<string, (int Index, string Json)> replacedHourlyTimes = new();
     private readonly ConcurrentDictionary<string, int> callsByHost = new();
     private readonly ConcurrentDictionary<string, int> inFlight = new();
     private readonly ConcurrentDictionary<string, int> maxInFlight = new();
@@ -33,9 +35,13 @@ public sealed class OpenMeteoStub : HttpMessageHandler
 
     public void SetDelay(string host, TimeSpan delay) => delays[host] = delay;
 
+    public void StallBody(string host) => stalledBodies[host] = true;
+
     public void Hold(string host, Task release) => holds[host] = release;
 
     public void OmitCurrentField(string host, string field) => omittedCurrentFields[host] = field;
+
+    public void ReplaceHourlyTime(string host, int index, string json) => replacedHourlyTimes[host] = (index, json);
 
     public void Script(string host, params HttpStatusCode[] statuses)
     {
@@ -77,6 +83,9 @@ public sealed class OpenMeteoStub : HttpMessageHandler
 
             if (delays.TryGetValue(host, out var delay) && delay > TimeSpan.Zero)
                 await Task.Delay(delay, cancellationToken);
+
+            if (stalledBodies.GetValueOrDefault(host))
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new StalledStream()) };
 
             if (scripts.TryGetValue(host, out var queue) && queue.TryDequeue(out var scripted))
                 return scripted();
@@ -139,7 +148,8 @@ public sealed class OpenMeteoStub : HttpMessageHandler
         if (query["start_hour"] is { } startHour)
         {
             var start = DateTimeOffset.ParseExact(startHour, "yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
-            var times = string.Join(',', Enumerable.Range(0, 24).Select(hour => $"\"{start.AddHours(hour).ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture)}\""));
+            var replaced = replacedHourlyTimes.GetValueOrDefault(host, (Index: -1, Json: ""));
+            var times = string.Join(',', Enumerable.Range(0, 24).Select(hour => hour == replaced.Index ? replaced.Json : $"\"{start.AddHours(hour).ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture)}\""));
             var series = fields.Select(field => $"\"{field.Field}\":[{string.Join(',', Enumerable.Repeat(field.Value.ToString(CultureInfo.InvariantCulture), 24))}]");
             parts.Add("\"hourly\":{\"time\":[" + times + "]," + string.Join(',', series) + "}");
         }

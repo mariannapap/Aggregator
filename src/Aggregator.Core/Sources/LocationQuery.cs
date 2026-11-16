@@ -22,4 +22,8 @@ public sealed record LocationQuery : ISourceQuery
 
     public string CacheKey => string.Create(CultureInfo.InvariantCulture,
         $"{Coordinates.Latitude:0.####}|{Coordinates.Longitude:0.####}|current={IncludesCurrent}|hourly={Hourly?.Start:yyyy-MM-ddTHH}|{Hourly?.Hours}");
+
+    // Without the window start, so the last good value outlives the hour it was fetched in; rows outside the current range are filtered out later.
+    public string FallbackKey => string.Create(CultureInfo.InvariantCulture,
+        $"{Coordinates.Latitude:0.####}|{Coordinates.Longitude:0.####}|current={IncludesCurrent}|hours={Hourly?.Hours}");
 }

@@ -148,6 +148,48 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
 
     [Fact]
     [FailureScenario]
+    public async Task PartialAnswerToTheSameQuery_DoesNotReplaceACompleteLastGood()
+    {
+        await GetAsync("hour-10", SourceResult.Ok(Old));
+        time.Advance(PastFreshness);
+        var partial = await GetAsync("hour-10", SourceResult.Partial(New));
+        time.Advance(PastFreshness);
+
+        var result = await GetAsync("hour-10", SourceResult.Unavailable<Weather>());
+
+        Assert.Equal(SourceStatus.Partial, partial.Status);
+        Assert.Equal(SourceStatus.Stale, result.Status);
+        Assert.Equal(Old.Current, result.Value!.Current);
+    }
+
+    [Fact]
+    [FailureScenario]
+    public async Task PartialAnswerToAnotherQuerySharingTheFallback_ReplacesTheLastGood()
+    {
+        await GetAsync("hour-10", SourceResult.Ok(Old));
+        await GetAsync("hour-11", SourceResult.Partial(New));
+
+        var result = await GetAsync("hour-12", SourceResult.Unavailable<Weather>());
+
+        Assert.Equal(SourceStatus.Stale, result.Status);
+        Assert.Equal(New.Current, result.Value!.Current);
+    }
+
+    [Fact]
+    [FailureScenario]
+    public async Task QueriesSharingAFallbackKey_ServeEachOthersLastGood()
+    {
+        await GetAsync("hour-10", SourceResult.Ok(Old));
+        time.Advance(TimeSpan.FromMinutes(30));
+
+        var result = await GetAsync("hour-11", SourceResult.Unavailable<Weather>());
+
+        Assert.Equal(SourceStatus.Stale, result.Status);
+        Assert.Equal(Old.Current, result.Value!.Current);
+    }
+
+    [Fact]
+    [FailureScenario]
     public async Task CallerCancelsDuringTheFetch_CancellationPropagatesAndNothingIsCached()
     {
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(Ct);
@@ -224,6 +266,9 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
     }
 
     public void Dispose() => provider.Dispose();
+
+    private Task<SourceResult<Weather>> GetAsync(string key, SourceResult<Weather> answer) =>
+        cache.GetAsync(key, "shared-fallback", _ => Task.FromResult(answer), new CacheTimes(FreshFor, KeepLastGood, null, TimeSpan.Zero), Ct);
 
     private async Task<SourceResult<Weather>[]> RunConcurrentlyAsync(GatedSource source)
     {
