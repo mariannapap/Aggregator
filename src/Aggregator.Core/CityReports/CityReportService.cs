@@ -32,11 +32,23 @@ public sealed class CityReportService(
         var (matchingPlaces, regionMatch) = FilterByRegion(places, request.Region);
         var hourlyRange = window is null ? null : HourlyFilter.ResolveRange(request.Hourly, window);
 
-        var reports = await Task.WhenAll(matchingPlaces.Select(place =>
-            BuildPlaceReportAsync(place, geocoded.Status, request, window, hourlyRange, cancellationToken)));
+        // Relevance and name order come from geocoding alone; only a temperature sort needs the weather of every place first.
+        var weatherFirst = request.Sort.Field == PlaceSortField.Temperature;
+        var candidates = await Task.WhenAll(matchingPlaces.Select(async place => new PlaceReport(
+            place,
+            relevance.DistanceKm(place.Coordinates),
+            geocoded.Status,
+            weatherFirst ? await FetchAsync(weather, CreateQuery(place, request, ReportSections.Weather, HourlyCategory.Weather, window), cancellationToken) : null,
+            null,
+            null,
+            null)));
+        var page = PlaceSorter.Sort(candidates, request.Sort).Skip(request.Page.Offset).Take(request.Page.Limit).ToList();
+
+        var reports = await Task.WhenAll(page.Select(candidate =>
+            CompletePlaceReportAsync(candidate, weatherFirst, request, window, hourlyRange, cancellationToken)));
 
         return new CityReportOutcome.Found(
-            new CityReport(new ReportFilters(regionMatch, hourlyRange), PlaceSorter.Sort(reports, request.Sort)));
+            new CityReport(new ReportFilters(regionMatch, hourlyRange, candidates.Length, page.Count < candidates.Length), reports));
     }
 
     private (IReadOnlyList<Place> Places, RegionMatch? Match) FilterByRegion(IReadOnlyList<Place> places, string? region)
@@ -51,15 +63,18 @@ public sealed class CityReportService(
         return (places.Where(place => place.Region is not null && match.Matched.Contains(place.Region)).ToList(), match);
     }
 
-    private async Task<PlaceReport> BuildPlaceReportAsync(
-        Place place,
-        SourceStatus geocodingStatus,
+    private async Task<PlaceReport> CompletePlaceReportAsync(
+        PlaceReport candidate,
+        bool weatherFetched,
         CityReportRequest request,
         HourlyWindow? window,
         HourlyRange? hourlyRange,
         CancellationToken cancellationToken)
     {
-        var weatherTask = FetchAsync(weather, CreateQuery(place, request, ReportSections.Weather, HourlyCategory.Weather, window), cancellationToken);
+        var place = candidate.Place;
+        var weatherTask = weatherFetched
+            ? Task.FromResult(candidate.Weather)
+            : FetchAsync(weather, CreateQuery(place, request, ReportSections.Weather, HourlyCategory.Weather, window), cancellationToken);
         var airQualityTask = FetchAsync(airQuality, CreateQuery(place, request, ReportSections.AirQuality, HourlyCategory.AirQuality, window), cancellationToken);
         var marineTask = FetchAsync(marine, CreateQuery(place, request, ReportSections.Marine, HourlyCategory.Marine, window), cancellationToken);
         await Task.WhenAll(weatherTask, airQualityTask, marineTask);
@@ -75,14 +90,7 @@ public sealed class CityReportService(
                 hourlyRange,
                 request.Hourly.SortDescending);
 
-        return new PlaceReport(
-            place,
-            relevance.DistanceKm(place.Coordinates),
-            geocodingStatus,
-            weatherResult,
-            airQualityResult,
-            marineResult,
-            hourly);
+        return candidate with { Weather = weatherResult, AirQuality = airQualityResult, Marine = marineResult, Hourly = hourly };
     }
 
     private LocationQuery? CreateQuery(

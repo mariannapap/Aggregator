@@ -1,13 +1,13 @@
 # Test report
 
-Generated 2026-11-16 18:32 UTC from the xUnit results of the Docker `test-report` stage.
+Generated 2026-11-16 18:50 UTC from the xUnit results of the Docker `test-report` stage.
 
-**304 tests · 304 passed · 0 failed · 0 skipped · 8.2 s** ✅
+**325 tests · 325 passed · 0 failed · 0 skipped · 8.8 s** ✅
 
 | Test project | Tests | Passed | Failed | Time |
 |---|---|---|---|---|
-| Aggregator.UnitTests | 227 | 227 | 0 | 0.7 s |
-| Aggregator.IntegrationTests | 77 | 77 | 0 | 7.5 s |
+| Aggregator.UnitTests | 240 | 240 | 0 | 0.8 s |
+| Aggregator.IntegrationTests | 85 | 85 | 0 | 8.0 s |
 
 Each test is tagged with the requirement(s) it proves and whether it emulates a success or a failure scenario. A test with several data rows (a theory) counts as one scenario.
 
@@ -17,12 +17,12 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 | Requirement | | Success scenarios | Failure scenarios | Result |
 |---|---|---|---|---|
-| **R1** | .NET service using ASP.NET Core | 0 | 0 | every integration test hosts the ASP.NET Core app (77 tests) |
+| **R1** | .NET service using ASP.NET Core | 0 | 0 | every integration test hosts the ASP.NET Core app (85 tests) |
 | **R2** | Architecture that makes integrating new APIs easy | 11 | 16 | ✅ |
 | **R3** | Data from at least three external APIs, simultaneously | 2 | 0 | ✅ |
-| **R4** | Endpoint returning the aggregated data | 6 | 2 | ✅ |
-| **R5** | Filtering and sorting (date, relevance, category) | 49 | 22 | ✅ |
-| **R6** | Error handling, transient failures, fallback | 2 | 78 | ✅ |
+| **R4** | Endpoint returning the aggregated data | 15 | 3 | ✅ |
+| **R5** | Filtering and sorting (date, relevance, category) | 53 | 23 | ✅ |
+| **R6** | Error handling, transient failures, fallback | 2 | 80 | ✅ |
 | **R7** | Unit tests | 0 | 0 | this report |
 | **R8** | Documentation | 7 | 0 | ✅ |
 | **R9** | Caching | 25 | 22 | ✅ |
@@ -78,10 +78,20 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | City report → lower case country → is accepted | success | ✅ | `CityReportApiTests` |
 | City report → valid request → aggregates all sources per place | success | ✅ | `CityReportApiTests` |
 | City report → with marine → returns marine values and only marine hourly rows | success | ✅ | `CityReportApiTests` |
+| By default → returns the configured limit → and calls the location apis only for those | success | ✅ | `PagingApiTests` |
+| Limit and offset → return the matching slice of the full order | success | ✅ | `PagingApiTests` |
+| Offset past the end → returns 200 with no places | success | ✅ | `PagingApiTests` |
+| Sort by temperature with a limit → ranks every place → but calls the other apis only for the page | success | ✅ | `PagingApiTests` |
+| Parse → limit and offset → are applied | success | ✅ | `CityReportQueryParserTests` |
+| Parse → no paging → uses the configured default limit from the start | success | ✅ | `CityReportQueryParserTests` |
 | Get → default request → calls every location source per place without hourly | success | ✅ | `CityReportServiceTests` |
 | Get → marine → maps current values per place | success | ✅ | `CityReportServiceTests` |
+| Get → offset past the end → returns no places but reports the total | success | ✅ | `CityReportServiceTests` |
+| Get → page covering every place → is not truncated | success | ✅ | `CityReportServiceTests` |
+| Get → page → fetches location data only for the places returned | success | ✅ | `CityReportServiceTests` |
 | City report → geocoding down without cache → returns 503 problem details | failure | ✅ | `CityReportApiTests` |
 | City report → unknown city → returns 404 problem details | failure | ✅ | `CityReportApiTests` |
+| Invalid paging → returns 400 (3 cases) | failure | ✅ | `PagingApiTests` |
 
 ## R5: Filtering and sorting (date, relevance, category)
 
@@ -89,12 +99,15 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |---|---|---|---|
 | City report → hourly follows include → only included sections produce rows | success | ✅ | `CityReportApiTests` |
 | City report → region sort and hourly category → are applied end to end | success | ✅ | `CityReportApiTests` |
+| Sort by temperature with a limit → ranks every place → but calls the other apis only for the page | success | ✅ | `PagingApiTests` |
 | Hourly bounds → are clamped and reported in filters | success | ✅ | `SourceStatusApiTests` |
 | Parse → defaults → include every data section sorted by relevance | success | ✅ | `CityReportQueryParserTests` |
 | Parse → empty hourly parameters → do not count as present | success | ✅ | `CityReportQueryParserTests` |
 | Parse → full query → maps every option | success | ✅ | `CityReportQueryParserTests` |
 | Parse → hourly category in include or hourly on its own → is accepted (3 cases) | success | ✅ | `CityReportQueryParserTests` |
 | Parse → iso timestamp → is accepted as utc (7 cases) | success | ✅ | `CityReportQueryParserTests` |
+| Parse → limit and offset → are applied | success | ✅ | `CityReportQueryParserTests` |
+| Parse → no paging → uses the configured default limit from the start | success | ✅ | `CityReportQueryParserTests` |
 | Parse → sort with optional dash → sets the direction (2 cases) | success | ✅ | `CityReportQueryParserTests` |
 | Get → default sort → is nearest to reference first | success | ✅ | `CityReportServiceTests` |
 | Get → hourly category → restricts hourly rows to that section | success | ✅ | `CityReportServiceTests` |
@@ -104,6 +117,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Get → hourly → merges filters and sorts rows | success | ✅ | `CityReportServiceTests` |
 | Get → region matches → filters places before calling sources | success | ✅ | `CityReportServiceTests` |
 | Get → sort by temperature descending → puts missing temperatures last | success | ✅ | `CityReportServiceTests` |
+| Get → sort by temperature with a limit → ranks every place but fetches the rest only for the page | success | ✅ | `CityReportServiceTests` |
 | Get → weather not included → does not call weather | success | ✅ | `CityReportServiceTests` |
 | Apply → descending → is latest first | success | ✅ | `HourlyFilterTests` |
 | Apply → keeps rows within inclusive bounds | success | ✅ | `HourlyFilterTests` |
@@ -147,6 +161,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Parse → invalid include → reports only include not the checks that depend on it | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → invalid include → still validates independent values | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → invalid input → reports the field (7 cases) | failure | ✅ | `CityReportQueryParserTests` |
+| Parse → invalid paging → reports the field (7 cases) | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → non iso timestamp → is rejected (4 cases) | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → region longer than configured limit → is rejected | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → several problems → reports all of them | failure | ✅ | `CityReportQueryParserTests` |
@@ -175,6 +190,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Malformed request body → returns 400 problem details | failure | ✅ | `ErrorHandlingTests` |
 | Malformed request body → when binding throws → is still 400 not a 500 | failure | ✅ | `ErrorHandlingTests` |
 | Unexpected exception → returns 500 problem details without internals | failure | ✅ | `ErrorHandlingTests` |
+| Invalid paging → returns 400 (3 cases) | failure | ✅ | `PagingApiTests` |
 | Concurrency queue full → rejected places are unavailable but the request succeeds | failure | ✅ | `ResilienceTests` |
 | Geocoding down with cached coordinates → returns 200 with geocoding stale | failure | ✅ | `ResilienceTests` |
 | Repeated failures → open the circuit → calls for another place never reach the api | failure | ✅ | `ResilienceTests` |
@@ -188,7 +204,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Malformed value after expiry → serves the last good value as stale | failure | ✅ | `SourceStatusApiTests` |
 | Malformed value from one source → degrades only that source | failure | ✅ | `SourceStatusApiTests` |
 | Upstream bad request → is called once without retry → and reported as no data | failure | ✅ | `SourceStatusApiTests` |
-| Invalid configuration → stops the app at startup (5 cases) | failure | ✅ | `StartupTests` |
+| Invalid configuration → stops the app at startup (6 cases) | failure | ✅ | `StartupTests` |
 | Server errors → count as failed → but an upstream 400 does not | failure | ✅ | `StatisticsApiTests` |
 | Parse → city longer than configured limit → is rejected | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → hourly category not in include → is rejected (2 cases) | failure | ✅ | `CityReportQueryParserTests` |
@@ -198,6 +214,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Parse → invalid include → reports only include not the checks that depend on it | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → invalid include → still validates independent values | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → invalid input → reports the field (7 cases) | failure | ✅ | `CityReportQueryParserTests` |
+| Parse → invalid paging → reports the field (7 cases) | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → non iso timestamp → is rejected (4 cases) | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → region longer than configured limit → is rejected | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → several problems → reports all of them | failure | ✅ | `CityReportQueryParserTests` |
@@ -392,28 +409,28 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 |||
 |:---|:---|
-| Generated on: | 11/16/2026 - 18:32:09 |
+| Generated on: | 11/16/2026 - 18:50:46 |
 | Parser: | MultiReport (2x Cobertura) |
 | Assemblies: | 3 |
-| Classes: | 125 |
-| Files: | 108 |
-| **Line coverage:** | 91.3% (1767 of 1935) |
-| Covered lines: | 1767 |
+| Classes: | 127 |
+| Files: | 110 |
+| **Line coverage:** | 91.4% (1799 of 1967) |
+| Covered lines: | 1799 |
 | Uncovered lines: | 168 |
-| Coverable lines: | 1935 |
-| Total lines: | 3148 |
-| **Branch coverage:** | 79.1% (814 of 1029) |
-| Covered branches: | 814 |
-| Total branches: | 1029 |
+| Coverable lines: | 1967 |
+| Total lines: | 3204 |
+| **Branch coverage:** | 79.5% (836 of 1051) |
+| Covered branches: | 836 |
+| Total branches: | 1051 |
 
 </details>
 
 #### Coverage
-<details><summary>Aggregator.Api - 81.7%</summary>
+<details><summary>Aggregator.Api - 81.9%</summary>
 
 |**Name**|**Line**|**Branch**|
 |:---|---:|---:|
-|**Aggregator.Api**|**81.7%**|**64.5%**|
+|**Aggregator.Api**|**81.9%**|**65.3%**|
 |Aggregator.Api.Auth.AuthOptions|100%||
 |Aggregator.Api.Auth.AuthOptionsValidator|100%|100%|
 |Aggregator.Api.Auth.AuthRegistration|100%|100%|
@@ -422,7 +439,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |Aggregator.Api.Auth.MockSigningKeys|100%||
 |Aggregator.Api.Auth.MockTokenIssuer|100%|100%|
 |Aggregator.Api.CityReports.CityReportQuery|100%||
-|Aggregator.Api.CityReports.CityReportQueryParser|100%|98.6%|
+|Aggregator.Api.CityReports.CityReportQueryParser|100%|98.8%|
 |Aggregator.Api.CityReports.ParseResult|100%||
 |Aggregator.Api.Composition.BearerRequirementTransformer|100%|100%|
 |Aggregator.Api.Composition.BearerSecurityTransformer|100%|83.3%|
@@ -430,7 +447,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |Aggregator.Api.Contracts.ApiStatisticsResponse|100%||
 |Aggregator.Api.Contracts.BucketResponse|100%||
 |Aggregator.Api.Contracts.BucketThresholdsResponse|100%||
-|Aggregator.Api.Contracts.CityReportMapper|97.5%|95.3%|
+|Aggregator.Api.Contracts.CityReportMapper|97.6%|95.3%|
 |Aggregator.Api.Contracts.CityReportResponse|100%||
 |Aggregator.Api.Contracts.CoordinatesResponse|100%||
 |Aggregator.Api.Contracts.FiltersResponse|100%||
@@ -458,22 +475,24 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 |System.Text.RegularExpressions.Generated.RunnerFactory.Runner|||
 
 </details>
-<details><summary>Aggregator.Core - 99.7%</summary>
+<details><summary>Aggregator.Core - 99.8%</summary>
 
 |**Name**|**Line**|**Branch**|
 |:---|---:|---:|
-|**Aggregator.Core**|**99.7%**|**97.3%**|
+|**Aggregator.Core**|**99.8%**|**97.4%**|
 |Aggregator.Core.CityReports.CityReport|100%||
 |Aggregator.Core.CityReports.CityReportOptions|100%||
+|Aggregator.Core.CityReports.CityReportOptionsValidator|100%|100%|
 |Aggregator.Core.CityReports.CityReportOutcome|100%||
 |Aggregator.Core.CityReports.CityReportOutcome.Found|100%||
 |Aggregator.Core.CityReports.CityReportOutcome.HourlyRangeOutsideWindow|100%||
 |Aggregator.Core.CityReports.CityReportRequest|100%||
-|Aggregator.Core.CityReports.CityReportService|100%|98.1%|
-|Aggregator.Core.CityReports.CityReportService<TResult>|100%|98.1%|
+|Aggregator.Core.CityReports.CityReportService|100%|98.2%|
+|Aggregator.Core.CityReports.CityReportService<TResult>|100%|98.2%|
 |Aggregator.Core.CityReports.HourlyFilter|100%|100%|
 |Aggregator.Core.CityReports.HourlyOptions|100%||
 |Aggregator.Core.CityReports.HourlyRange|100%|100%|
+|Aggregator.Core.CityReports.PlacePage|100%||
 |Aggregator.Core.CityReports.PlaceReport|100%||
 |Aggregator.Core.CityReports.PlaceSort|100%||
 |Aggregator.Core.CityReports.PlaceSorter|100%|91.6%|

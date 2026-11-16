@@ -16,6 +16,7 @@ public static class CoreServiceCollectionExtensions
         services.AddOptions<StatisticsOptions>().BindConfiguration(StatisticsOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
         services.AddOptions<AnomalyOptions>().BindConfiguration(AnomalyOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
 
+        services.AddSingleton<IValidateOptions<CityReportOptions>, CityReportOptionsValidator>();
         services.AddSingleton<IValidateOptions<StatisticsOptions>, StatisticsOptionsValidator>();
         services.AddSingleton<IValidateOptions<AnomalyOptions>, AnomalyOptionsValidator>();
 

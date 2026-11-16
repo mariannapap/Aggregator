@@ -12,7 +12,9 @@ internal static class CityReportMapper
                 report.Filters.Region is { } region ? new RegionFilterResponse(region.Requested, region.Matched, region.Applied) : null,
                 report.Filters.HourlyRange is { } range
                     ? new HourlyRangeResponse(range.RequestedFrom, range.RequestedTo, range.AppliedFrom, range.AppliedTo, range.Clamped)
-                    : null),
+                    : null,
+                report.Filters.TotalPlaces,
+                report.Filters.Truncated),
             report.Places.Select(ToResponse).ToList());
 
     public static string ToContract(this SourceStatus status) => status switch

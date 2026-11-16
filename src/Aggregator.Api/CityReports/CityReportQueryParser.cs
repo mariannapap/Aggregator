@@ -74,10 +74,25 @@ internal sealed partial class CityReportQueryParser(IOptions<CityReportOptions> 
 
         var sort = ParseSort(query.Sort, sections, errors);
         var hourly = ParseHourly(query, sections, errors);
+        var page = ParsePage(query, settings, errors);
 
         return errors.Count > 0
             ? new ParseResult(null, errors)
-            : new ParseResult(new CityReportRequest(city, country, sections ?? DefaultSections, region, sort, hourly), errors);
+            : new ParseResult(new CityReportRequest(city, country, sections ?? DefaultSections, region, sort, hourly, page), errors);
+    }
+
+    private static PlacePage ParsePage(CityReportQuery query, CityReportOptions settings, Dictionary<string, string[]> errors)
+    {
+        var limit = settings.DefaultPlaceLimit;
+        if (!string.IsNullOrWhiteSpace(query.Limit)
+            && (!int.TryParse(query.Limit.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit < 1 || limit > settings.MaxPlaceLimit))
+            errors["limit"] = [$"limit must be a whole number from 1 to {settings.MaxPlaceLimit}."];
+
+        var offset = 0;
+        if (!string.IsNullOrWhiteSpace(query.Offset) && !int.TryParse(query.Offset.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out offset))
+            errors["offset"] = ["offset must be a whole number, 0 or more."];
+
+        return new PlacePage(offset, limit);
     }
 
     // Null when include is invalid: checks that depend on the sections are then skipped.

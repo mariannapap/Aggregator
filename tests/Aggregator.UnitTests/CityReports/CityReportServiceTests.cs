@@ -288,14 +288,75 @@ public sealed class CityReportServiceTests
         Assert.Empty(weather.Queries);
     }
 
+    [Fact]
+    [Requirement("R4")]
+    public async Task GetAsync_Page_FetchesLocationDataOnlyForThePlacesReturned()
+    {
+        RespondWithFivePlaces();
+
+        var report = Found(await CreateService().GetAsync(Request(page: new PlacePage(1, 2)), Ct));
+
+        Assert.Equal(["Place 3", "Place 2"], report.Places.Select(place => place.Place.Name));
+        Assert.Equal((5, true), (report.Filters.TotalPlaces, report.Filters.Truncated));
+        Assert.Equal((2, 2, 2), (weather.Queries.Count, airQuality.Queries.Count, marine.Queries.Count));
+    }
+
+    [Fact]
+    [Requirement("R5")]
+    public async Task GetAsync_SortByTemperatureWithALimit_RanksEveryPlaceButFetchesTheRestOnlyForThePage()
+    {
+        RespondWithFivePlaces();
+
+        var report = Found(await CreateService().GetAsync(Request(sort: new PlaceSort(PlaceSortField.Temperature, false), page: new PlacePage(0, 2)), Ct));
+
+        Assert.Equal(["Place 0", "Place 1"], report.Places.Select(place => place.Place.Name));
+        Assert.All(report.Places, place => Assert.Equal(SourceStatus.Ok, place.AirQuality!.Status));
+        Assert.Equal((5, 2, 2), (weather.Queries.Count, airQuality.Queries.Count, marine.Queries.Count));
+    }
+
+    [Fact]
+    [Requirement("R4")]
+    public async Task GetAsync_OffsetPastTheEnd_ReturnsNoPlacesButReportsTheTotal()
+    {
+        RespondWithFivePlaces();
+
+        var report = Found(await CreateService().GetAsync(Request(page: new PlacePage(10, 2)), Ct));
+
+        Assert.Empty(report.Places);
+        Assert.Equal((5, true), (report.Filters.TotalPlaces, report.Filters.Truncated));
+        Assert.Empty(weather.Queries);
+    }
+
+    [Fact]
+    [Requirement("R4")]
+    public async Task GetAsync_PageCoveringEveryPlace_IsNotTruncated()
+    {
+        RespondWithFivePlaces();
+
+        var report = Found(await CreateService().GetAsync(Request(page: new PlacePage(0, 5)), Ct));
+
+        Assert.Equal((5, 5, false), (report.Places.Count, report.Filters.TotalPlaces, report.Filters.Truncated));
+    }
+
+    // Place i sits at latitude 36 + 0.1 i: higher means nearer the Acropolis, and its temperature is its latitude.
+    private void RespondWithFivePlaces()
+    {
+        geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>(
+            [.. Enumerable.Range(0, 5).Select(index => new Place($"Place {index}", "GR", "Attica", new Coordinates(36 + index * 0.1, 24)))]);
+        weather.Respond = query => SourceResult.Ok(new Weather(new CurrentWeather(query.Coordinates.Latitude, 1), []));
+        airQuality.Respond = _ => SourceResult.Ok(new AirQuality(new CurrentAirQuality(40), []));
+        marine.Respond = _ => SourceResult.Ok(new Marine(new CurrentMarine(0.1, 20), []));
+    }
+
     private static CityReport Found(CityReportOutcome outcome) => Assert.IsType<CityReportOutcome.Found>(outcome).Report;
 
     private static CityReportRequest Request(
         ReportSections sections = ReportSectionsExtensions.DataSections,
         string? region = null,
         PlaceSort? sort = null,
-        HourlyOptions? hourly = null) =>
-        new("Athens", "GR", sections, region, sort ?? PlaceSort.Default, hourly ?? HourlyOptions.Default);
+        HourlyOptions? hourly = null,
+        PlacePage? page = null) =>
+        new("Athens", "GR", sections, region, sort ?? PlaceSort.Default, hourly ?? HourlyOptions.Default, page ?? new PlacePage(0, 100));
 
     private CityReportService CreateService() =>
         new(

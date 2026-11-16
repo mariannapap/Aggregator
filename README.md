@@ -104,6 +104,8 @@ Tests are tagged with `[Requirement("R6")]` and `[FailureScenario]`; [tools/Test
 | `include` | query | comma-separated: `weather`, `airQuality`, `marine`, `hourly`. Only the APIs for the requested sections are called; hourly rows come from the included sections (all three with `include=hourly` on its own) | `weather,airQuality,marine` |
 | `region` | query | region name, fuzzy-matched (`krete` → Crete, `attiki` → Attica, `macedonia` → both Macedonias) | none |
 | `sort` | query | `relevance`, `name`, `temperature`; prefix `-` for descending | `relevance` |
+| `limit` | query | how many places to return, 1–100; applied after the region filter and the sort, **before** any weather, air-quality or marine call (with `sort=temperature`, weather is fetched for every place to rank them, the other APIs only for the page) | `20` |
+| `offset` | query | places to skip, for paging; past the end returns an empty list | `0` |
 | `hourly.category` | query | `weather`, `airQuality` or `marine`: narrows hourly rows to one section, which must also be in `include` (or `include=hourly` alone) | all included |
 | `hourly.from`, `hourly.to` | query | ISO 8601 date-times; bounds outside the 24 h window are clamped to it, and a range that does not overlap it at all returns `400` | whole window |
 | `hourly.sort` | query | `time` or `-time` | `time` |
@@ -114,7 +116,8 @@ Example: `GET /city-report/GR/Chania?region=crete&sort=-temperature&include=weat
 {
   "filters": {
     "region": { "requested": "crete", "matched": ["Crete"], "applied": true },
-    "hourly": { "appliedFrom": "2026-11-15T16:00:00+00:00", "appliedTo": "2026-11-16T15:00:00+00:00", "clamped": false }
+    "hourly": { "appliedFrom": "2026-11-15T16:00:00+00:00", "appliedTo": "2026-11-16T15:00:00+00:00", "clamped": false },
+    "totalPlaces": 2, "truncated": false
   },
   "places": [
     {
@@ -142,7 +145,7 @@ Example: `GET /city-report/GR/Chania?region=crete&sort=-temperature&include=weat
 | `marine` | current wave height (m) and sea surface temperature (°C); `sources.marine` is `no_data` for places away from the sea |
 | `hourly` | one row per metric per hour, for a fixed window of **24 hours starting at the current hour (UTC)** |
 | `sources` | status of each external API used for this place (see below) |
-| `filters` | how the region and hourly filters were applied; a region that matches nothing is **ignored and reported** (`applied: false`) |
+| `filters` | how the region and hourly filters were applied (a region that matches nothing is **ignored and reported**, `applied: false`), plus `totalPlaces` (places after the region filter) and `truncated` (more places exist than this page returns) |
 
 **Per-source status:** `ok` · `partial` (some values or hours missing) · `no_data` (valid answer, nothing usable) · `stale` (fresh call failed, served from the last good cached value) · `unavailable` (failed, nothing cached).
 

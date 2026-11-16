@@ -25,6 +25,14 @@ internal sealed class CityReportQuery
     [Description("relevance (distance from the Acropolis, nearest first; default), name or temperature. Prefix with '-' for descending. temperature requires include=weather; places without a temperature sort last.")]
     public string? Sort { get; init; }
 
+    [FromQuery(Name = "limit")]
+    [Description("Maximum number of places to return (default 20, at most 100; set by CityReport:DefaultPlaceLimit and MaxPlaceLimit). Applied after the region filter and the sort, before any weather, air-quality or marine call. filters.totalPlaces and filters.truncated tell whether more places exist.")]
+    public string? Limit { get; init; }
+
+    [FromQuery(Name = "offset")]
+    [Description("Number of places to skip after sorting, for paging (default 0). An offset past the end returns an empty list.")]
+    public string? Offset { get; init; }
+
     [FromQuery(Name = "hourly.category")]
     [Description("weather, airQuality or marine: narrows hourly rows to one section, which must also be in include (or include=hourly on its own). Requires include=hourly.")]
     public string? HourlyCategory { get; init; }

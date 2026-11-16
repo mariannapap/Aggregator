@@ -65,7 +65,7 @@ public sealed class CityReportServiceConcurrencyTests
     }
 
     private static CityReportRequest Request() =>
-        new("Athens", "GR", ReportSectionsExtensions.DataSections, null, PlaceSort.Default, HourlyOptions.Default);
+        new("Athens", "GR", ReportSectionsExtensions.DataSections, null, PlaceSort.Default, HourlyOptions.Default, new PlacePage(0, 100));
 
     private static CityReportService CreateService(
         IExternalSource<GeocodingQuery, IReadOnlyList<Place>> geocoding,

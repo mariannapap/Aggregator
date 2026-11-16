@@ -189,6 +189,28 @@ public sealed class CityReportQueryParserTests
         Assert.Contains("hourly.from", parser.Parse(new CityReportQuery { Country = "GR", City = "Athens", Include = "hourly", HourlyFrom = value }).Errors.Keys);
 
     [Fact]
+    [Requirement("R4")]
+    public void Parse_NoPaging_UsesTheConfiguredDefaultLimitFromTheStart() =>
+        Assert.Equal(new PlacePage(0, 20), parser.Parse(new CityReportQuery { Country = "GR", City = "Athens" }).Request?.Page);
+
+    [Fact]
+    [Requirement("R4")]
+    public void Parse_LimitAndOffset_AreApplied() =>
+        Assert.Equal(new PlacePage(40, 5), parser.Parse(new CityReportQuery { Country = "GR", City = "Athens", Limit = " 5 ", Offset = "40" }).Request?.Page);
+
+    [Theory]
+    [InlineData("limit", "0", null)]
+    [InlineData("limit", "101", null)]
+    [InlineData("limit", "-5", null)]
+    [InlineData("limit", "2.5", null)]
+    [InlineData("limit", "ten", null)]
+    [InlineData("offset", null, "-1")]
+    [InlineData("offset", null, "99999999999")]
+    [Requirement("R6"), FailureScenario]
+    public void Parse_InvalidPaging_ReportsTheField(string field, string? limit, string? offset) =>
+        Assert.Equal([field], parser.Parse(new CityReportQuery { Country = "GR", City = "Athens", Limit = limit, Offset = offset }).Errors.Keys);
+
+    [Fact]
     [Requirement("R6"), FailureScenario]
     public void Parse_CityLongerThanConfiguredLimit_IsRejected() =>
         Assert.Contains("city", parser.Parse(new CityReportQuery { Country = "GR", City = new string('a', 101) }).Errors.Keys);

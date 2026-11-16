@@ -6,4 +6,5 @@ public sealed record CityReportRequest(
     ReportSections Sections,
     string? Region,
     PlaceSort Sort,
-    HourlyOptions Hourly);
+    HourlyOptions Hourly,
+    PlacePage Page);

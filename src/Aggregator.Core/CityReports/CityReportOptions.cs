@@ -17,4 +17,10 @@ public sealed class CityReportOptions
 
     [Range(1, 200)]
     public int MaxRegionLength { get; set; } = 100;
+
+    [Range(1, 100)]
+    public int DefaultPlaceLimit { get; set; } = 20;
+
+    [Range(1, 100)]
+    public int MaxPlaceLimit { get; set; } = 100;
 }
