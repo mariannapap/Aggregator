@@ -230,7 +230,7 @@ Adding an API means writing an adapter and a model; caching, resilience, statist
 
 ### Security
 
-The API only **validates** tokens: signature, issuer, audience, lifetime, and a `reader` role policy on `/city-report` and `/stats`; anything else requires an authenticated user by default. The mock issuer exists only for the demo: it is off unless `MockAuth:Enabled` is `true`, and signs with an RSA key generated in memory at startup, so there are no secrets to manage. In production the mock is disabled and `Auth:Authority` points to a real identity provider (e.g. Microsoft Entra ID); no code changes.
+The API only **validates** tokens: signature, issuer, audience, lifetime, and a `reader` role policy on `/city-report` and `/stats` (the role is read from the `roles` claim, the array Microsoft Entra ID issues, and the mock issues the same shape); anything else requires an authenticated user by default. The mock issuer exists only for the demo: it is off unless `MockAuth:Enabled` is `true`, and signs with an RSA key generated in memory at startup, so there are no secrets to manage. In production the mock is disabled and `Auth:Authority` points to a real identity provider (e.g. Microsoft Entra ID); no code changes.
 
 ## Configuration
 

@@ -1,13 +1,13 @@
 # Test report
 
-Generated 2026-11-16 18:14 UTC from the xUnit results of the Docker `test-report` stage.
+Generated 2026-11-16 18:32 UTC from the xUnit results of the Docker `test-report` stage.
 
-**301 tests · 301 passed · 0 failed · 0 skipped · 8.1 s** ✅
+**304 tests · 304 passed · 0 failed · 0 skipped · 8.2 s** ✅
 
 | Test project | Tests | Passed | Failed | Time |
 |---|---|---|---|---|
-| Aggregator.UnitTests | 227 | 227 | 0 | 0.6 s |
-| Aggregator.IntegrationTests | 74 | 74 | 0 | 7.5 s |
+| Aggregator.UnitTests | 227 | 227 | 0 | 0.7 s |
+| Aggregator.IntegrationTests | 77 | 77 | 0 | 7.5 s |
 
 Each test is tagged with the requirement(s) it proves and whether it emulates a success or a failure scenario. A test with several data rows (a theory) counts as one scenario.
 
@@ -17,7 +17,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 | Requirement | | Success scenarios | Failure scenarios | Result |
 |---|---|---|---|---|
-| **R1** | .NET service using ASP.NET Core | 0 | 0 | every integration test hosts the ASP.NET Core app (74 tests) |
+| **R1** | .NET service using ASP.NET Core | 0 | 0 | every integration test hosts the ASP.NET Core app (77 tests) |
 | **R2** | Architecture that makes integrating new APIs easy | 11 | 16 | ✅ |
 | **R3** | Data from at least three external APIs, simultaneously | 2 | 0 | ✅ |
 | **R4** | Endpoint returning the aggregated data | 6 | 2 | ✅ |
@@ -28,7 +28,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | **R9** | Caching | 25 | 22 | ✅ |
 | **R10** | Parallelism | 3 | 1 | ✅ |
 | **R11** | Request statistics with performance buckets | 13 | 5 | ✅ |
-| **O1** | JWT bearer authentication | 10 | 9 | ✅ |
+| **O1** | JWT bearer authentication | 12 | 10 | ✅ |
 | **O2** | Performance anomaly logging (background service) | 10 | 3 | ✅ |
 
 ## R2: Architecture that makes integrating new APIs easy
@@ -344,6 +344,8 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 | Scenario | Type | Result | Test |
 |---|---|---|---|
+| Entra shaped token → with a roles array → returns 200 | success | ✅ | `AuthTests` |
+| Mock token → carries the role in a roles array → like entra | success | ✅ | `AuthTests` |
 | Valid hand made token → returns 200 | success | ✅ | `AuthTests` |
 | Health → is anonymous | success | ✅ | `CityReportApiTests` |
 | Optional endpoints → when disabled → are not mapped | success | ✅ | `CityReportApiTests` |
@@ -357,6 +359,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Expired token → returns 401 with expiry reason | failure | ✅ | `AuthTests` |
 | Malformed token or wrong scheme → returns 401 (3 cases) | failure | ✅ | `AuthTests` |
 | Token for another issuer or audience → returns 401 (2 cases) | failure | ✅ | `AuthTests` |
+| Token with the singular role claim → returns 403 | failure | ✅ | `AuthTests` |
 | City report → token signed with untrusted key → returns 401 | failure | ✅ | `CityReportApiTests` |
 | City report → token without role → returns 403 | failure | ✅ | `CityReportApiTests` |
 | City report → without token → returns 401 | failure | ✅ | `CityReportApiTests` |
@@ -389,16 +392,16 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 |||
 |:---|:---|
-| Generated on: | 11/16/2026 - 18:14:29 |
+| Generated on: | 11/16/2026 - 18:32:09 |
 | Parser: | MultiReport (2x Cobertura) |
 | Assemblies: | 3 |
 | Classes: | 125 |
 | Files: | 108 |
-| **Line coverage:** | 91.3% (1766 of 1934) |
-| Covered lines: | 1766 |
+| **Line coverage:** | 91.3% (1767 of 1935) |
+| Covered lines: | 1767 |
 | Uncovered lines: | 168 |
-| Coverable lines: | 1934 |
-| Total lines: | 3147 |
+| Coverable lines: | 1935 |
+| Total lines: | 3148 |
 | **Branch coverage:** | 79.1% (814 of 1029) |
 | Covered branches: | 814 |
 | Total branches: | 1029 |

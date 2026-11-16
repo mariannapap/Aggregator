@@ -24,8 +24,6 @@ internal sealed class MockTokenIssuer(
             new(JwtRegisteredClaimNames.Sub, $"mock-{user.ToString().ToLowerInvariant()}"),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N"))
         };
-        if (user != MockUser.Forbidden)
-            claims.Add(new Claim(AuthClaims.Role, auth.RequiredRole));
 
         var signingKey = user == MockUser.Invalid ? keys.Untrusted : keys.Trusted;
         var descriptor = new SecurityTokenDescriptor
@@ -33,6 +31,9 @@ internal sealed class MockTokenIssuer(
             Issuer = auth.Issuer,
             Audience = auth.Audience,
             Subject = new ClaimsIdentity(claims),
+            Claims = user == MockUser.Forbidden
+                ? null
+                : new Dictionary<string, object> { [AuthClaims.Roles] = new[] { auth.RequiredRole } },
             IssuedAt = now,
             NotBefore = now,
             Expires = now.Add(lifetime),

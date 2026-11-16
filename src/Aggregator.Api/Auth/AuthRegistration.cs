@@ -28,7 +28,7 @@ internal static class AuthRegistration
                 jwt.TokenValidationParameters.ValidateLifetime = true;
                 jwt.TokenValidationParameters.ValidateIssuerSigningKey = true;
                 jwt.TokenValidationParameters.ClockSkew = settings.ClockSkew;
-                jwt.TokenValidationParameters.RoleClaimType = AuthClaims.Role;
+                jwt.TokenValidationParameters.RoleClaimType = AuthClaims.Roles;
                 jwt.TokenValidationParameters.NameClaimType = JwtRegisteredClaimNames.Sub;
 
                 if (mock.Value.Enabled)

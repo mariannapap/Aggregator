@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using Aggregator.Api.Auth;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -51,6 +53,45 @@ public sealed class AuthTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact]
+    public async Task EntraShapedToken_WithARolesArray_Returns200()
+    {
+        await using var factory = new AggregatorApiFactory();
+        var reader = factory.Services.GetRequiredService<IOptions<AuthOptions>>().Value.RequiredRole;
+
+        var token = CreateToken(factory, roleClaims: new Dictionary<string, object> { ["roles"] = new[] { "other", reader } });
+        var response = await GetCityReportAsync(factory, new AuthenticationHeaderValue("Bearer", token));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    [FailureScenario]
+    public async Task TokenWithTheSingularRoleClaim_Returns403()
+    {
+        await using var factory = new AggregatorApiFactory();
+        var reader = factory.Services.GetRequiredService<IOptions<AuthOptions>>().Value.RequiredRole;
+
+        var token = CreateToken(factory, roleClaims: new Dictionary<string, object> { ["role"] = reader });
+        var response = await GetCityReportAsync(factory, new AuthenticationHeaderValue("Bearer", token));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task MockToken_CarriesTheRoleInARolesArray_LikeEntra()
+    {
+        await using var factory = new AggregatorApiFactory();
+        var login = await factory.CreateClient().PostAsJsonAsync(new Uri("/mock-login", UriKind.Relative), new { user = "valid" }, Ct);
+        var token = (await login.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("access_token").GetString()!;
+
+        var payload = JsonDocument.Parse(Base64UrlEncoder.Decode(new JsonWebToken(token).EncodedPayload)).RootElement;
+
+        Assert.Equal(JsonValueKind.Array, payload.GetProperty("roles").ValueKind);
+        Assert.Equal(["reader"], payload.GetProperty("roles").EnumerateArray().Select(role => role.GetString()));
+        Assert.False(payload.TryGetProperty("role", out _));
+    }
+
     [Theory]
     [InlineData("Bearer", "not-a-jwt")]
     [InlineData("Bearer", "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ4In0.")]
@@ -72,7 +113,12 @@ public sealed class AuthTests
         return await client.GetAsync(new Uri("/city-report/GR/Athens", UriKind.Relative), Ct);
     }
 
-    private static string CreateToken(AggregatorApiFactory factory, string? issuer = null, string? audience = null, DateTime? expires = null)
+    private static string CreateToken(
+        AggregatorApiFactory factory,
+        string? issuer = null,
+        string? audience = null,
+        DateTime? expires = null,
+        Dictionary<string, object>? roleClaims = null)
     {
         var auth = factory.Services.GetRequiredService<IOptions<AuthOptions>>().Value;
         var key = factory.Services.GetRequiredService<MockSigningKeys>().Trusted;
@@ -82,7 +128,8 @@ public sealed class AuthTests
         {
             Issuer = issuer ?? auth.Issuer,
             Audience = audience ?? auth.Audience,
-            Subject = new ClaimsIdentity([new Claim(JwtRegisteredClaimNames.Sub, "test"), new Claim(AuthClaims.Role, auth.RequiredRole)]),
+            Subject = new ClaimsIdentity([new Claim(JwtRegisteredClaimNames.Sub, "test")]),
+            Claims = roleClaims ?? new Dictionary<string, object> { [AuthClaims.Roles] = auth.RequiredRole },
             IssuedAt = expiry.AddMinutes(-10),
             NotBefore = expiry.AddMinutes(-10),
             Expires = expiry,

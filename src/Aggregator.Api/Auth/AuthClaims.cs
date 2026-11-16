@@ -2,5 +2,6 @@ namespace Aggregator.Api.Auth;
 
 internal static class AuthClaims
 {
-    public const string Role = "role";
+    // Microsoft Entra ID's claim for app roles: a JSON array of strings.
+    public const string Roles = "roles";
 }
