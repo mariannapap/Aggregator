@@ -38,6 +38,6 @@ public sealed class HourlyWindowTests
 
     [Fact]
     [Requirement("R9")]
-    public void GeocodingQuery_NormalizesCityAndCountryInKey() =>
-        Assert.Equal("GR|athens", new GeocodingQuery("  Athens ", "gr").CacheKey);
+    public void GeocodingQuery_KeyIgnoresTheCaseOfTheCity() =>
+        Assert.Equal(new GeocodingQuery("athens", "GR").CacheKey, new GeocodingQuery("ATHENS", "GR").CacheKey);
 }

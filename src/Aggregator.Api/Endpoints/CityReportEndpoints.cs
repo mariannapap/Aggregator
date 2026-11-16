@@ -17,7 +17,7 @@ internal static class CityReportEndpoints
             .WithTags("City report")
             .MapGet("/{country}/{city}", GetCityReport)
             .WithName("GetCityReport")
-            .WithSummary("Aggregates geocoding, current weather, air quality and hourly data for every matching place.")
+            .WithSummary("Aggregates geocoding, current weather, air quality, marine and hourly data for every matching place.")
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)

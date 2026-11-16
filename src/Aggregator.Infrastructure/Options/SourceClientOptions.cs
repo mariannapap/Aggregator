@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aggregator.Infrastructure.Options;
 
-public sealed class SourceClientOptions
+internal sealed class SourceClientOptions
 {
     public const string SectionPrefix = "HttpClients";
 

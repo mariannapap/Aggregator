@@ -7,7 +7,6 @@ using Aggregator.Infrastructure.OpenMeteo;
 using Aggregator.Infrastructure.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Aggregator.Infrastructure;
@@ -16,7 +15,6 @@ public static class InfrastructureServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.TryAddSingleton(TimeProvider.System);
         services.AddHybridCache();
         services.AddMetrics();
         services.AddSingleton<StaleAwareCache>();
@@ -24,6 +22,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<ICachePolicy<LocationQuery>, LocationCachePolicy>();
         services.AddSingleton<ExternalApiMetrics>();
         services.AddOptions<GeocodingOptions>().BindConfiguration(GeocodingOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+        services.AddSingleton<IValidateOptions<SourceClientOptions>, SourceClientOptionsValidator>();
 
         services.AddSource<GeocodingQuery, IReadOnlyList<Place>, GeocodingSource>(configuration, SourceNames.Geocoding);
         services.AddSource<LocationQuery, Weather, WeatherSource>(configuration, SourceNames.Weather);
@@ -41,6 +40,7 @@ public static class InfrastructureServiceCollectionExtensions
     {
         var section = $"{SourceClientOptions.SectionPrefix}:{name}";
         services.AddOptions<SourceClientOptions>(name).BindConfiguration(section).ValidateDataAnnotations().ValidateOnStart();
+        services.AddSingleton(new MonitoredApi(name));
 
         var client = services.AddHttpClient<IExternalSource<TQuery, TResult>, TSource>(name, (provider, http) =>
             http.BaseAddress = provider.GetRequiredService<IOptionsMonitor<SourceClientOptions>>().Get(name).BaseUrl);

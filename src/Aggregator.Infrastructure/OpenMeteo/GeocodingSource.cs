@@ -26,11 +26,16 @@ internal sealed class GeocodingSource(HttpClient http, IOptions<GeocodingOptions
             return SourceResult.NoData<IReadOnlyList<Place>>();
 
         var allowed = settings.AllowedFeatureCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var places = results
+        var matching = results
             .Where(result => result.FeatureCode is not null && allowed.Contains(result.FeatureCode))
             .Where(result => string.Equals(result.CountryCode, query.Country, StringComparison.OrdinalIgnoreCase))
-            .Select(result => new Place(result.Name, result.CountryCode!.ToUpperInvariant(), result.Admin1, new Coordinates(result.Latitude, result.Longitude)))
             .ToList();
+        var places = matching
+            .Where(result => result.Latitude is not null && result.Longitude is not null)
+            .Select(result => new Place(result.Name, result.CountryCode!.ToUpperInvariant(), result.Admin1, new Coordinates(result.Latitude!.Value, result.Longitude!.Value)))
+            .ToList();
+        if (places.Count < matching.Count)
+            logger.ResultsWithoutCoordinates(Name, matching.Count - places.Count);
 
         return places.Count == 0 ? SourceResult.NoData<IReadOnlyList<Place>>() : SourceResult.Ok<IReadOnlyList<Place>>(places);
     }
@@ -39,8 +44,8 @@ internal sealed class GeocodingSource(HttpClient http, IOptions<GeocodingOptions
 
     private sealed record GeocodingResult(
         string Name,
-        double Latitude,
-        double Longitude,
+        double? Latitude,
+        double? Longitude,
         [property: JsonPropertyName("feature_code")] string? FeatureCode,
         [property: JsonPropertyName("country_code")] string? CountryCode,
         string? Admin1);

@@ -13,12 +13,12 @@ public sealed class CircuitBreakerLifecycleTests
         {
             await wireMock.FailAsync("marine");
             for (var request = 0; request < 4; request++)
-                Assert.Equal("unavailable", ApiSession.Status(await session.GetReportPlaceAsync(E2EEnvironment.UniqueCity("Breaker")), "marine"));
+                Assert.Equal("unavailable", (await session.GetReportPlaceAsync(E2EEnvironment.UniqueCity("Breaker"))).SourceStatus("marine"));
 
             var callsWhenOpen = await wireMock.CountAsync("marine");
             var whileOpen = await session.GetReportPlaceAsync(E2EEnvironment.UniqueCity("Breaker"));
-            Assert.Equal("unavailable", ApiSession.Status(whileOpen, "marine"));
-            Assert.Equal("ok", ApiSession.Status(whileOpen, "weather"));
+            Assert.Equal("unavailable", whileOpen.SourceStatus("marine"));
+            Assert.Equal("ok", whileOpen.SourceStatus("weather"));
             Assert.Equal(callsWhenOpen, await wireMock.CountAsync("marine"));
 
             await wireMock.ResetAsync();
@@ -26,9 +26,9 @@ public sealed class CircuitBreakerLifecycleTests
             var callsAfterRecovery = await wireMock.CountAsync("marine");
 
             var probe = await session.GetReportPlaceAsync(E2EEnvironment.UniqueCity("Breaker"));
-            Assert.Equal("ok", ApiSession.Status(probe, "marine"));
+            Assert.Equal("ok", probe.SourceStatus("marine"));
             var closed = await session.GetReportPlaceAsync(E2EEnvironment.UniqueCity("Breaker"));
-            Assert.Equal("ok", ApiSession.Status(closed, "marine"));
+            Assert.Equal("ok", closed.SourceStatus("marine"));
             Assert.Equal(callsAfterRecovery + 2, await wireMock.CountAsync("marine"));
         }
         finally

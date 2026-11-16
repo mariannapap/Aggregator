@@ -53,28 +53,32 @@ public sealed class AnomalyBackgroundServiceTests
     }
 
     [Fact]
-    public async Task Tick_NoAnomalies_LogsNothing()
+    public async Task Tick_NoAnomalies_RunsTheDetectorAndLogsNothing()
     {
-        using var service = CreateService(new StubDetector(() => []));
+        var detections = 0;
+        using var service = CreateService(new StubDetector(() =>
+        {
+            Interlocked.Increment(ref detections);
+            return [];
+        }));
 
         await service.StartAsync(Ct);
-        for (var tick = 0; tick < 5; tick++)
-        {
-            time.Advance(Interval);
-            await Task.Delay(20, Ct);
-        }
+        await AdvanceUntilAsync(() => Volatile.Read(ref detections) >= 3);
         await service.StopAsync(Ct);
 
+        Assert.True(detections >= 3, $"The detector ran {detections} time(s); expected at least 3.");
         Assert.Empty(logger.Collector.GetSnapshot());
     }
 
     private AnomalyBackgroundService CreateService(IAnomalyDetector detector) =>
         new(detector, Options.Create(new AnomalyOptions { Interval = Interval }), time, logger);
 
-    private async Task AdvanceUntilLoggedAsync(int count)
+    private Task AdvanceUntilLoggedAsync(int count) => AdvanceUntilAsync(() => logger.Collector.Count >= count);
+
+    private async Task AdvanceUntilAsync(Func<bool> done)
     {
         var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (logger.Collector.Count < count && DateTime.UtcNow < deadline)
+        while (!done() && DateTime.UtcNow < deadline)
         {
             time.Advance(Interval);
             await Task.Delay(20, Ct);

@@ -13,7 +13,7 @@ public sealed class AnomalyDetectorTests
 
     public AnomalyDetectorTests()
     {
-        store = new StatisticsStore(Options.Create(new StatisticsOptions()), time);
+        store = new StatisticsStore(Options.Create(new StatisticsOptions()), time, []);
         detector = new AnomalyDetector(store, Options.Create(new AnomalyOptions { WindowMinutes = 5, Ratio = 1.5, MinSamples = 5, MinimumIncreaseMs = 50 }));
     }
 
@@ -96,6 +96,6 @@ public sealed class AnomalyDetectorTests
     private void RecordMany(int count, double milliseconds)
     {
         for (var i = 0; i < count; i++)
-            store.Record("weather", TimeSpan.FromMilliseconds(milliseconds));
+            store.Record("weather", TimeSpan.FromMilliseconds(milliseconds), succeeded: true);
     }
 }

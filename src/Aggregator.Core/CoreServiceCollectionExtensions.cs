@@ -1,12 +1,12 @@
 using Aggregator.Core.CityReports;
 using Aggregator.Core.Query;
 using Aggregator.Core.Statistics;
-using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Aggregator.Api.Composition;
+namespace Aggregator.Core;
 
-internal static class CoreRegistration
+public static class CoreServiceCollectionExtensions
 {
     public static IServiceCollection AddCore(this IServiceCollection services)
     {
@@ -19,11 +19,11 @@ internal static class CoreRegistration
         services.AddSingleton<IValidateOptions<StatisticsOptions>, StatisticsOptionsValidator>();
         services.AddSingleton<IValidateOptions<AnomalyOptions>, AnomalyOptionsValidator>();
 
-        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<RegionMatcher>();
         services.AddSingleton<RelevanceCalculator>();
         services.AddSingleton<StatisticsStore>();
         services.AddSingleton<IStatisticsRecorder>(provider => provider.GetRequiredService<StatisticsStore>());
+        services.AddSingleton<IStatisticsReader>(provider => provider.GetRequiredService<StatisticsStore>());
         services.AddSingleton<IAnomalyDetector, AnomalyDetector>();
         services.AddTransient<CityReportService>();
         return services;

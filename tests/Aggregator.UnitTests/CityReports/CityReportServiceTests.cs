@@ -63,7 +63,7 @@ public sealed class CityReportServiceTests
     }
 
     [Fact]
-    [Requirement("R3"), Requirement("R4")]
+    [Requirement("R4")]
     public async Task GetAsync_DefaultRequest_CallsEveryLocationSourcePerPlaceWithoutHourly()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Athens, Airport]);

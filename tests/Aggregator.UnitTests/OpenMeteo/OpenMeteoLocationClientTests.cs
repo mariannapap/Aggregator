@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aggregator.UnitTests.OpenMeteo;
 
-[Requirement("R2"), Requirement("R3")]
+[Requirement("R2")]
 public sealed class OpenMeteoLocationClientTests
 {
     private static readonly OpenMeteoEndpoint Endpoint = new(

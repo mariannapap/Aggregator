@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Aggregator.Core.CityReports;
 using Aggregator.Core.Model;
 using Aggregator.Core.Sources;
@@ -7,10 +8,22 @@ using Microsoft.Extensions.Options;
 
 namespace Aggregator.Api.CityReports;
 
-internal sealed class CityReportQueryParser(IOptions<CityReportOptions> options)
+internal sealed partial class CityReportQueryParser(IOptions<CityReportOptions> options)
 {
     private const string HourlyToken = "hourly";
     private const ReportSections DefaultSections = ReportSectionsExtensions.DataSections;
+    private const string IncludeValues = "Allowed values: weather, airQuality, marine, hourly (comma-separated).";
+
+    private static readonly string[] IsoFormats =
+    [
+        "yyyy-MM-dd'T'HH:mmK",
+        "yyyy-MM-dd'T'HH:mm:ssK",
+        "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFK",
+        "yyyy-MM-dd'T'HH:mm",
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF",
+        "yyyy-MM-dd"
+    ];
 
     private static readonly FrozenDictionary<string, ReportSections> Sections = new Dictionary<string, ReportSections>
     {
@@ -64,10 +77,11 @@ internal sealed class CityReportQueryParser(IOptions<CityReportOptions> options)
 
         return errors.Count > 0
             ? new ParseResult(null, errors)
-            : new ParseResult(new CityReportRequest(city, country, sections, region, sort, hourly), errors);
+            : new ParseResult(new CityReportRequest(city, country, sections ?? DefaultSections, region, sort, hourly), errors);
     }
 
-    private static ReportSections ParseSections(string? include, Dictionary<string, string[]> errors)
+    // Null when include is invalid: checks that depend on the sections are then skipped.
+    private static ReportSections? ParseSections(string? include, Dictionary<string, string[]> errors)
     {
         if (string.IsNullOrWhiteSpace(include))
             return DefaultSections;
@@ -77,38 +91,46 @@ internal sealed class CityReportQueryParser(IOptions<CityReportOptions> options)
         {
             if (!Sections.TryGetValue(token, out var section))
             {
-                errors["include"] = ["Allowed values: weather, airQuality, marine, hourly (comma-separated)."];
-                return DefaultSections;
+                errors["include"] = [IncludeValues];
+                return null;
             }
 
             sections |= section;
         }
 
-        return sections;
+        if (sections != ReportSections.None)
+            return sections;
+
+        errors["include"] = [$"include must name at least one section. {IncludeValues}"];
+        return null;
     }
 
-    private static PlaceSort ParseSort(string? value, ReportSections sections, Dictionary<string, string[]> errors)
+    private static PlaceSort ParseSort(string? value, ReportSections? sections, Dictionary<string, string[]> errors)
     {
         if (string.IsNullOrWhiteSpace(value))
             return PlaceSort.Default;
 
-        var descending = value.StartsWith('-');
-        if (!SortFields.TryGetValue(value.TrimStart('-').Trim(), out var field))
+        var trimmed = value.Trim();
+        var descending = trimmed.StartsWith('-');
+        if (!SortFields.TryGetValue(descending ? trimmed[1..] : trimmed, out var field))
         {
-            errors["sort"] = ["Allowed values: relevance, name, temperature; prefix with '-' for descending."];
+            errors["sort"] = ["Allowed values: relevance, name, temperature; prefix with one '-' for descending."];
             return PlaceSort.Default;
         }
 
-        if (field == PlaceSortField.Temperature && !sections.HasFlag(ReportSections.Weather))
+        if (field == PlaceSortField.Temperature && sections is { } included && !included.HasFlag(ReportSections.Weather))
             errors["sort"] = ["sort=temperature requires include=weather."];
 
         return new PlaceSort(field, descending);
     }
 
-    private static HourlyOptions ParseHourly(CityReportQuery query, ReportSections sections, Dictionary<string, string[]> errors)
+    private static HourlyOptions ParseHourly(CityReportQuery query, ReportSections? sections, Dictionary<string, string[]> errors)
     {
-        var anyHourlyParameter = query.HourlyCategory is not null || query.HourlyFrom is not null || query.HourlyTo is not null || query.HourlySort is not null;
-        if (!sections.HasFlag(ReportSections.Hourly))
+        var anyHourlyParameter = !string.IsNullOrWhiteSpace(query.HourlyCategory)
+            || !string.IsNullOrWhiteSpace(query.HourlyFrom)
+            || !string.IsNullOrWhiteSpace(query.HourlyTo)
+            || !string.IsNullOrWhiteSpace(query.HourlySort);
+        if (sections is { } included && !included.HasFlag(ReportSections.Hourly))
         {
             if (anyHourlyParameter)
                 errors[HourlyToken] = ["hourly.* parameters require include=hourly."];
@@ -120,7 +142,7 @@ internal sealed class CityReportQueryParser(IOptions<CityReportOptions> options)
         {
             if (!HourlyCategories.TryGetValue(query.HourlyCategory.Trim(), out var parsed))
                 errors["hourly.category"] = ["Allowed values: weather, airQuality, marine."];
-            else if (!sections.IncludesHourlyFor(parsed))
+            else if (sections is { } withHourly && !withHourly.IncludesHourlyFor(parsed))
                 errors["hourly.category"] = [$"hourly.category={query.HourlyCategory.Trim()} requires that section in include (or include=hourly on its own)."];
             else
                 category = parsed;
@@ -142,10 +164,16 @@ internal sealed class CityReportQueryParser(IOptions<CityReportOptions> options)
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
-        if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+
+        // An unencoded '+' in a query string arrives as a space: "…T18:00 02:00" means "…T18:00+02:00".
+        var candidate = SpaceBeforeOffset().Replace(value.Trim(), "+");
+        if (DateTimeOffset.TryParseExact(candidate, IsoFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
             return parsed;
 
-        errors[name] = ["Must be an ISO 8601 date-time, e.g. 2026-11-15T18:00Z."];
+        errors[name] = ["Must be an ISO 8601 date-time, e.g. 2026-11-15T18:00Z or 2026-11-15T20:00+02:00."];
         return null;
     }
+
+    [GeneratedRegex(@"(?<=T\d{2}:\d{2}(:\d{2}(\.\d+)?)?) (?=\d{2}:\d{2}$)")]
+    private static partial Regex SpaceBeforeOffset();
 }

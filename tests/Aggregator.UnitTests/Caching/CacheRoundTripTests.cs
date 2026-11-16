@@ -1,16 +1,16 @@
 using Aggregator.Core.Model;
 using Aggregator.Infrastructure.Caching;
 using Aggregator.UnitTests.Support;
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Caching;
 
 [Requirement("R9")]
 public sealed class CacheRoundTripTests : IDisposable
 {
-    private static readonly TimeSpan FreshFor = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan FreshFor = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan KeepLastGood = TimeSpan.FromHours(1);
     private static readonly DateTimeOffset Hour = new(2026, 11, 16, 10, 0, 0, TimeSpan.Zero);
 
@@ -28,7 +28,8 @@ public sealed class CacheRoundTripTests : IDisposable
         new("Nowhere", "GR", null, new Coordinates(-12.5, 0.000001))
     ];
 
-    private readonly InMemoryDistributedCache sharedL2 = new(TimeProvider.System);
+    private readonly FakeTimeProvider time = new(Hour);
+    private readonly InMemoryDistributedCache sharedL2;
     private readonly ServiceProvider writerProvider;
     private readonly ServiceProvider readerProvider;
     private readonly StaleAwareCache writer;
@@ -36,8 +37,9 @@ public sealed class CacheRoundTripTests : IDisposable
 
     public CacheRoundTripTests()
     {
-        writerProvider = CreateProvider(sharedL2);
-        readerProvider = CreateProvider(sharedL2);
+        sharedL2 = new InMemoryDistributedCache(time);
+        writerProvider = FakeClockCache.Create(time, sharedL2);
+        readerProvider = FakeClockCache.Create(time, sharedL2);
         writer = new StaleAwareCache(writerProvider.GetRequiredService<HybridCache>());
         reader = new StaleAwareCache(readerProvider.GetRequiredService<HybridCache>());
     }
@@ -78,7 +80,7 @@ public sealed class CacheRoundTripTests : IDisposable
     public async Task FullWeatherGraph_SurvivesTheLastGoodPathThroughTheSharedStore()
     {
         await writer.GetAsync("weather", _ => Task.FromResult(SourceResult.Ok(Rich)), FreshFor, KeepLastGood, Ct);
-        await Task.Delay(FreshFor * 3, Ct);
+        time.Advance(FreshFor * 3);
 
         var stale = await reader.GetAsync("weather", _ => Task.FromResult(SourceResult.Unavailable<Weather>()), FreshFor, KeepLastGood, Ct);
 
@@ -100,20 +102,19 @@ public sealed class CacheRoundTripTests : IDisposable
     [Requirement("R6"), FailureScenario]
     public async Task ServingStale_DoesNotExtendTheLastGoodRetention()
     {
-        var retention = TimeSpan.FromMilliseconds(400);
-        var freshFor = TimeSpan.FromMilliseconds(50);
-        await writer.GetAsync("key", _ => Task.FromResult(SourceResult.Ok(Rich)), freshFor, retention, Ct);
+        var retention = TimeSpan.FromMinutes(10);
+        await writer.GetAsync("key", _ => Task.FromResult(SourceResult.Ok(Rich)), FreshFor, retention, Ct);
         Task<SourceResult<Weather>> Failing(CancellationToken _) => Task.FromResult(SourceResult.Unavailable<Weather>());
 
         var served = new List<SourceStatus>();
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(100), Ct);
-            served.Add((await writer.GetAsync("key", Failing, freshFor, retention, Ct)).Status);
+            time.Advance(TimeSpan.FromMinutes(3));
+            served.Add((await writer.GetAsync("key", Failing, FreshFor, retention, Ct)).Status);
         }
 
-        await Task.Delay(TimeSpan.FromMilliseconds(400), Ct);
-        var afterRetention = await writer.GetAsync("key", Failing, freshFor, retention, Ct);
+        time.Advance(TimeSpan.FromMinutes(3));
+        var afterRetention = await writer.GetAsync("key", Failing, FreshFor, retention, Ct);
 
         Assert.All(served, status => Assert.Equal(SourceStatus.Stale, status));
         Assert.Equal(SourceStatus.Unavailable, afterRetention.Status);
@@ -123,14 +124,6 @@ public sealed class CacheRoundTripTests : IDisposable
     {
         writerProvider.Dispose();
         readerProvider.Dispose();
-    }
-
-    private static ServiceProvider CreateProvider(IDistributedCache sharedL2)
-    {
-        var services = new ServiceCollection();
-        services.AddSingleton(sharedL2);
-        services.AddHybridCache();
-        return services.BuildServiceProvider();
     }
 
     private static void AssertSameWeather(Weather expected, Weather actual)

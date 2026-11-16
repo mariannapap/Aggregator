@@ -72,6 +72,8 @@ foreach (var assembly in assemblies)
 report.AppendLine();
 report.AppendLine("Each test is tagged with the requirement(s) it proves and whether it emulates a success or a failure scenario. A test with several data rows (a theory) counts as one scenario.");
 report.AppendLine();
+report.AppendLine("The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image against WireMock and is reported separately by `e2e/run.ps1` and `e2e/run.sh`; it is not part of these numbers.");
+report.AppendLine();
 report.AppendLine("## Coverage by requirement");
 report.AppendLine();
 report.AppendLine("| Requirement | | Success scenarios | Failure scenarios | Result |");
@@ -174,6 +176,6 @@ internal sealed record Scenario(
 
 internal static partial class Program
 {
-    [GeneratedRegex("(?<=[a-z])(?=[A-Z0-9])|(?<=[0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")]
+    [GeneratedRegex("(?<=[a-z])(?=[A-Z0-9])|(?<=[0-9])(?=[A-Z])|(?<=[A-Z])(?=[0-9])|(?<=[A-Z])(?=[A-Z][a-z])")]
     private static partial Regex Words();
 }

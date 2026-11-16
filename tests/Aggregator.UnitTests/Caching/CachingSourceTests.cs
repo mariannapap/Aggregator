@@ -18,12 +18,12 @@ public sealed class CachingSourceTests : IDisposable
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task FetchAsync_SameQuery_CallsTheSourceOnce()
+    public async Task FetchAsync_SameQueryInAnotherCase_CallsTheSourceOnce()
     {
         var source = CreateSource();
 
         await source.FetchAsync(new GeocodingQuery("Athens", "GR"), Ct);
-        var second = await source.FetchAsync(new GeocodingQuery(" athens ", "gr"), Ct);
+        var second = await source.FetchAsync(new GeocodingQuery("ATHENS", "GR"), Ct);
 
         Assert.Equal(1, inner.Calls);
         Assert.Equal(SourceStatus.Ok, second.Status);

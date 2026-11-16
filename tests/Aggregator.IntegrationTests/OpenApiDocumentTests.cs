@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace Aggregator.IntegrationTests;
 
 [Requirement("R8")]
-public sealed class OpenApiDocumentTests
+public sealed class OpenApiDocumentTests(OpenApiDocumentFixture fixture) : IClassFixture<OpenApiDocumentFixture>
 {
     private const string CityReportPath = "/city-report/{country}/{city}";
 
@@ -12,21 +12,41 @@ public sealed class OpenApiDocumentTests
 
     [Fact]
     [Requirement("O1")]
-    public async Task Document_DeclaresBearerSchemeOnceAndNoGlobalRequirement()
+    public void Document_DeclaresTheBearerSchemeWithoutAGlobalRequirement()
     {
-        var document = await GetDocumentAsync();
+        Assert.Equal("bearer", BearerScheme(fixture.Document).GetProperty("scheme").GetString());
+        Assert.False(fixture.Document.TryGetProperty("security", out _));
+    }
 
-        Assert.Equal("bearer", document.GetProperty("components").GetProperty("securitySchemes").GetProperty("Bearer").GetProperty("scheme").GetString());
-        Assert.False(document.TryGetProperty("security", out _));
+    [Fact]
+    [Requirement("O1")]
+    public void BearerScheme_WithTheMockEnabled_PointsToMockLogin() =>
+        Assert.Contains("/mock-login", BearerScheme(fixture.Document).GetProperty("description").GetString(), StringComparison.Ordinal);
+
+    [Fact]
+    [Requirement("O1")]
+    public async Task BearerScheme_WithTheMockDisabled_DoesNotMentionMockLogin()
+    {
+        await using var factory = new AggregatorApiFactory();
+        using var client = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("MockAuth:Enabled", "false");
+            builder.UseSetting("Auth:Authority", "https://login.example.com/tenant/v2.0");
+            builder.UseSetting("OpenApi:EnableUi", "true");
+        }).CreateClient();
+
+        var document = await client.GetFromJsonAsync<JsonElement>(new Uri("/openapi/v1.json", UriKind.Relative), Ct);
+
+        Assert.DoesNotContain("mock-login", BearerScheme(document).GetProperty("description").GetString(), StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData(CityReportPath, "get")]
     [InlineData("/stats", "get")]
     [Requirement("O1")]
-    public async Task ProtectedOperations_RequireBearerAndDocument401And403(string path, string method)
+    public void ProtectedOperations_RequireBearerAndDocument401And403(string path, string method)
     {
-        var operation = Operation(await GetDocumentAsync(), path, method);
+        var operation = Operation(path, method);
 
         Assert.True(operation.GetProperty("security")[0].TryGetProperty("Bearer", out _));
         var responses = operation.GetProperty("responses");
@@ -36,12 +56,8 @@ public sealed class OpenApiDocumentTests
 
     [Fact]
     [Requirement("O1")]
-    public async Task MockLogin_IsAnonymousInTheDocument()
-    {
-        var operation = Operation(await GetDocumentAsync(), "/mock-login", "post");
-
-        Assert.False(operation.TryGetProperty("security", out _));
-    }
+    public void MockLogin_IsAnonymousInTheDocument() =>
+        Assert.False(Operation("/mock-login", "post").TryGetProperty("security", out _));
 
     [Theory]
     [InlineData("sort", "relevance")]
@@ -49,21 +65,23 @@ public sealed class OpenApiDocumentTests
     [InlineData("hourly.category", "airQuality")]
     [InlineData("include", "marine")]
     [InlineData("country", "ISO 3166-1")]
-    public async Task CityReportParameters_HaveDescriptions(string name, string expectedText)
+    public void CityReportParameters_HaveDescriptions(string name, string expectedText)
     {
-        var parameters = Operation(await GetDocumentAsync(), CityReportPath, "get").GetProperty("parameters").EnumerateArray();
+        var parameter = Operation(CityReportPath, "get").GetProperty("parameters").EnumerateArray()
+            .Single(item => item.GetProperty("name").GetString() == name);
 
-        var parameter = parameters.Single(item => item.GetProperty("name").GetString() == name);
         Assert.Contains(expectedText, parameter.GetProperty("description").GetString(), StringComparison.Ordinal);
     }
 
-    private static JsonElement Operation(JsonElement document, string path, string method) =>
-        document.GetProperty("paths").GetProperty(path).GetProperty(method);
+    [Fact]
+    public void CityReportSummary_NamesEveryLocationApi() =>
+        Assert.All(
+            ["weather", "air quality", "marine"],
+            api => Assert.Contains(api, Operation(CityReportPath, "get").GetProperty("summary").GetString(), StringComparison.Ordinal));
 
-    private static async Task<JsonElement> GetDocumentAsync()
-    {
-        await using var factory = new AggregatorApiFactory();
-        using var client = factory.WithWebHostBuilder(builder => builder.UseSetting("OpenApi:EnableUi", "true")).CreateClient();
-        return await client.GetFromJsonAsync<JsonElement>(new Uri("/openapi/v1.json", UriKind.Relative), Ct);
-    }
+    private static JsonElement BearerScheme(JsonElement document) =>
+        document.GetProperty("components").GetProperty("securitySchemes").GetProperty("Bearer");
+
+    private JsonElement Operation(string path, string method) =>
+        fixture.Document.GetProperty("paths").GetProperty(path).GetProperty(method);
 }

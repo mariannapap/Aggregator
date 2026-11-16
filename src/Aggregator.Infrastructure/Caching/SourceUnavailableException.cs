@@ -9,14 +9,4 @@ internal sealed class SourceUnavailableException : Exception
         : base("The source is unavailable.")
     {
     }
-
-    public SourceUnavailableException(string message)
-        : base(message)
-    {
-    }
-
-    public SourceUnavailableException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
 }

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Net;
-using System.Text.Json;
 
 namespace Aggregator.IntegrationTests;
 
@@ -23,8 +22,8 @@ public sealed class ResilienceTests
 
         var place = (await client.GetJsonAsync(Report)).GetProperty("places")[0];
 
-        Assert.Equal("ok", Status(place, "weather"));
-        Assert.Equal(2, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Weather));
+        Assert.Equal("ok", place.SourceStatus("weather"));
+        Assert.Equal(AggregatorApiFactory.AttemptsPerCall, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Weather));
     }
 
     [Fact]
@@ -39,8 +38,8 @@ public sealed class ResilienceTests
         var stopwatch = Stopwatch.StartNew();
         var place = (await client.GetJsonAsync(Report)).GetProperty("places")[0];
 
-        Assert.Equal("ok", Status(place, "weather"));
-        Assert.Equal(2, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Weather));
+        Assert.Equal("ok", place.SourceStatus("weather"));
+        Assert.Equal(AggregatorApiFactory.AttemptsPerCall, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Weather));
         Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(900), $"Retry-After was not honoured ({stopwatch.Elapsed}).");
     }
 
@@ -56,31 +55,32 @@ public sealed class ResilienceTests
         var stopwatch = Stopwatch.StartNew();
         var place = (await client.GetJsonAsync(Report)).GetProperty("places")[0];
 
-        Assert.Equal("unavailable", Status(place, "weather"));
-        Assert.Equal("ok", Status(place, "airQuality"));
-        Assert.Equal(2, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Weather));
+        Assert.Equal("unavailable", place.SourceStatus("weather"));
+        Assert.Equal("ok", place.SourceStatus("airQuality"));
+        Assert.Equal(AggregatorApiFactory.AttemptsPerCall, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Weather));
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(3), $"The attempt timeout did not cut the slow call ({stopwatch.Elapsed}).");
     }
 
     [Fact]
     [FailureScenario]
-    public async Task RepeatedFailures_OpenTheCircuit_LaterCallsFailFastWithoutReachingTheApi()
+    public async Task RepeatedFailures_OpenTheCircuit_CallsForAnotherPlaceNeverReachTheApi()
     {
         await using var factory = new AggregatorApiFactory();
-        factory.OpenMeteo.GeneratedPlaces = 1;
+        factory.OpenMeteo.GeneratedPlaces = 2;
         factory.OpenMeteo.SetDown(OpenMeteoHosts.Weather, true);
         var client = await factory.WithSettings(
             ($"{WeatherResilience}:CircuitBreaker:MinimumThroughput", "2"),
             ($"{WeatherResilience}:CircuitBreaker:FailureRatio", "0.5"),
             ($"{WeatherResilience}:CircuitBreaker:BreakDuration", "00:00:30")).CreateAuthorizedClientAsync();
 
-        var first = (await client.GetJsonAsync(Report)).GetProperty("places")[0];
+        var first = (await client.GetJsonAsync($"{Report}?region=attica")).GetProperty("places")[0];
         var callsWhenOpened = factory.OpenMeteo.CallsTo(OpenMeteoHosts.Weather);
-        var second = (await client.GetJsonAsync(Report)).GetProperty("places")[0];
+        var other = (await client.GetJsonAsync($"{Report}?region=crete")).GetProperty("places")[0];
 
-        Assert.Equal("unavailable", Status(first, "weather"));
-        Assert.Equal("unavailable", Status(second, "weather"));
-        Assert.Equal(2, callsWhenOpened);
+        Assert.Equal("unavailable", first.SourceStatus("weather"));
+        Assert.Equal(AggregatorApiFactory.AttemptsPerCall, callsWhenOpened);
+        Assert.NotEqual(first.GetProperty("city").GetString(), other.GetProperty("city").GetString());
+        Assert.Equal("unavailable", other.SourceStatus("weather"));
         Assert.Equal(callsWhenOpened, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Weather));
     }
 
@@ -97,8 +97,8 @@ public sealed class ResilienceTests
         await Task.Delay(TimeSpan.FromMilliseconds(1500), Ct);
         var stale = (await client.GetJsonAsync(Report)).GetProperty("places")[0];
 
-        Assert.Equal("ok", Status(fresh, "weather"));
-        Assert.Equal("stale", Status(stale, "weather"));
+        Assert.Equal("ok", fresh.SourceStatus("weather"));
+        Assert.Equal("stale", stale.SourceStatus("weather"));
         Assert.Equal(18.5, stale.GetProperty("weather").GetProperty("temperature").GetDouble());
     }
 
@@ -115,8 +115,8 @@ public sealed class ResilienceTests
         await Task.Delay(TimeSpan.FromMilliseconds(1500), Ct);
         var place = (await client.GetJsonAsync(Report)).GetProperty("places")[0];
 
-        Assert.Equal("stale", Status(place, "geocoding"));
-        Assert.Equal("ok", Status(place, "weather"));
+        Assert.Equal("stale", place.SourceStatus("geocoding"));
+        Assert.Equal("ok", place.SourceStatus("weather"));
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public sealed class ResilienceTests
         var places = (await client.GetJsonAsync(Report)).GetProperty("places").EnumerateArray().ToList();
 
         Assert.Equal(6, places.Count);
-        Assert.All(places, place => Assert.Equal("ok", Status(place, "weather")));
+        Assert.All(places, place => Assert.Equal("ok", place.SourceStatus("weather")));
         Assert.Equal(2, factory.OpenMeteo.MaxInFlight(OpenMeteoHosts.Weather));
     }
 
@@ -148,13 +148,10 @@ public sealed class ResilienceTests
             ($"{WeatherResilience}:RateLimiter:DefaultRateLimiterOptions:PermitLimit", "1"),
             ($"{WeatherResilience}:RateLimiter:DefaultRateLimiterOptions:QueueLimit", "0")).CreateAuthorizedClientAsync();
 
-        var statuses = (await client.GetJsonAsync(Report)).GetProperty("places").EnumerateArray().Select(place => Status(place, "weather")).ToList();
+        var statuses = (await client.GetJsonAsync(Report)).GetProperty("places").EnumerateArray().Select(place => place.SourceStatus("weather")).ToList();
 
         Assert.Contains("ok", statuses);
         Assert.Contains("unavailable", statuses);
         Assert.Equal(1, factory.OpenMeteo.MaxInFlight(OpenMeteoHosts.Weather));
     }
-
-    private static string? Status(JsonElement place, string source) =>
-        place.GetProperty("sources").GetProperty(source).GetString();
 }

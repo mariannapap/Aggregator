@@ -6,13 +6,16 @@ namespace Aggregator.UnitTests.Statistics;
 public sealed class StatisticsOptionsValidatorTests
 {
     [Theory]
-    [InlineData(100, 200, true)]
-    [InlineData(150, 150, true)]
-    [InlineData(300, 200, false)]
+    [InlineData(100, 200)]
+    [InlineData(150, 150)]
+    [Requirement("R11")]
+    public void Statistics_FastThresholdNotAboveSlow_IsValid(int fastBelowMs, int slowAboveMs) =>
+        Assert.True(ValidateStatistics(fastBelowMs, slowAboveMs).Succeeded);
+
+    [Fact]
     [Requirement("R11"), FailureScenario]
-    public void Statistics_FastThresholdMustNotExceedSlow(int fastBelowMs, int slowAboveMs, bool valid) =>
-        Assert.Equal(valid, new StatisticsOptionsValidator()
-            .Validate(null, new StatisticsOptions { FastBelowMs = fastBelowMs, SlowAboveMs = slowAboveMs }).Succeeded);
+    public void Statistics_FastThresholdAboveSlow_Fails() =>
+        Assert.True(ValidateStatistics(fastBelowMs: 300, slowAboveMs: 200).Failed);
 
     [Fact]
     [Requirement("O2")]
@@ -40,6 +43,9 @@ public sealed class StatisticsOptionsValidatorTests
         Assert.True(result.Failed);
         Assert.Contains("Anomaly:Interval", result.FailureMessage, StringComparison.Ordinal);
     }
+
+    private static ValidateOptionsResult ValidateStatistics(int fastBelowMs, int slowAboveMs) =>
+        new StatisticsOptionsValidator().Validate(null, new StatisticsOptions { FastBelowMs = fastBelowMs, SlowAboveMs = slowAboveMs });
 
     private static ValidateOptionsResult ValidateAnomaly(int minutesKept, int windowMinutes, TimeSpan interval) =>
         new AnomalyOptionsValidator(Options.Create(new StatisticsOptions { RecentMinutesKept = minutesKept }))

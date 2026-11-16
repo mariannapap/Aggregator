@@ -3,13 +3,19 @@ using Microsoft.Extensions.Options;
 
 namespace Aggregator.Core.Statistics;
 
-public sealed class StatisticsStore(IOptions<StatisticsOptions> options, TimeProvider timeProvider) : IStatisticsRecorder
+public sealed class StatisticsStore(IOptions<StatisticsOptions> options, TimeProvider timeProvider, IEnumerable<MonitoredApi> monitoredApis)
+    : IStatisticsRecorder, IStatisticsReader
 {
-    private readonly ConcurrentDictionary<string, ApiStatistics> statistics = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ApiStatistics> statistics = new(
+        monitoredApis
+            .Select(api => api.Name)
+            .Distinct(StringComparer.Ordinal)
+            .Select(name => KeyValuePair.Create(name, new ApiStatistics(options.Value.RecentMinutesKept))),
+        StringComparer.Ordinal);
 
     public IReadOnlyList<string> Apis => statistics.Keys.Order(StringComparer.Ordinal).ToList();
 
-    public void Record(string api, TimeSpan duration)
+    public void Record(string api, TimeSpan duration, bool succeeded)
     {
         var settings = options.Value;
         var milliseconds = duration.TotalMilliseconds;
@@ -17,7 +23,7 @@ public sealed class StatisticsStore(IOptions<StatisticsOptions> options, TimePro
             : milliseconds > settings.SlowAboveMs ? Bucket.Slow
             : Bucket.Average;
 
-        statistics.GetOrAdd(api, _ => new ApiStatistics(settings.RecentMinutesKept)).Record(milliseconds, bucket, CurrentMinute());
+        statistics.GetOrAdd(api, _ => new ApiStatistics(settings.RecentMinutesKept)).Record(milliseconds, bucket, succeeded, CurrentMinute());
     }
 
     public IReadOnlyList<ApiStatisticsSnapshot> Snapshot() =>
@@ -40,6 +46,7 @@ public sealed class StatisticsStore(IOptions<StatisticsOptions> options, TimePro
 
     private sealed record Totals(
         long Count,
+        long FailedCount,
         double TotalMs,
         long FastCount,
         double FastMs,
@@ -48,11 +55,16 @@ public sealed class StatisticsStore(IOptions<StatisticsOptions> options, TimePro
         long SlowCount,
         double SlowMs)
     {
-        public static Totals Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0);
+        public static Totals Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0);
 
-        public Totals Add(double milliseconds, Bucket bucket)
+        public Totals Add(double milliseconds, Bucket bucket, bool succeeded)
         {
-            var updated = this with { Count = Count + 1, TotalMs = TotalMs + milliseconds };
+            var updated = this with
+            {
+                Count = Count + 1,
+                FailedCount = succeeded ? FailedCount : FailedCount + 1,
+                TotalMs = TotalMs + milliseconds
+            };
             return bucket switch
             {
                 Bucket.Fast => updated with { FastCount = FastCount + 1, FastMs = FastMs + milliseconds },
@@ -69,14 +81,14 @@ public sealed class StatisticsStore(IOptions<StatisticsOptions> options, TimePro
         private readonly MinuteSlot?[] slots = new MinuteSlot?[minutesKept];
         private Totals totals = Totals.Empty;
 
-        public void Record(double milliseconds, Bucket bucket, long minute)
+        public void Record(double milliseconds, Bucket bucket, bool succeeded, long minute)
         {
             Totals current;
             do
             {
                 current = Volatile.Read(ref totals);
             }
-            while (!ReferenceEquals(Interlocked.CompareExchange(ref totals, current.Add(milliseconds, bucket), current), current));
+            while (!ReferenceEquals(Interlocked.CompareExchange(ref totals, current.Add(milliseconds, bucket, succeeded), current), current));
 
             var index = (int)(minute % slots.Length);
             MinuteSlot? slot;
@@ -120,12 +132,13 @@ public sealed class StatisticsStore(IOptions<StatisticsOptions> options, TimePro
             return new ApiStatisticsSnapshot(
                 api,
                 current.Count,
+                current.FailedCount,
                 Average(current.TotalMs, current.Count),
                 new BucketSnapshot(current.FastCount, Average(current.FastMs, current.FastCount)),
                 new BucketSnapshot(current.AverageCount, Average(current.AverageMs, current.AverageCount)),
                 new BucketSnapshot(current.SlowCount, Average(current.SlowMs, current.SlowCount)));
         }
 
-        private static double Average(double total, long count) => count == 0 ? 0 : Math.Round(total / count, 2);
+        private static double? Average(double total, long count) => count == 0 ? null : Math.Round(total / count, 2);
     }
 }

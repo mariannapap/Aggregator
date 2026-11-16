@@ -1,7 +1,9 @@
 using Aggregator.Core.Model;
 using Aggregator.Infrastructure.Caching;
 using Microsoft.Extensions.Caching.Hybrid;
+using Aggregator.UnitTests.Support;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Caching;
 
@@ -10,12 +12,13 @@ public sealed class StaleAwareCacheTests : IDisposable
 {
     private static readonly Weather Sample = new(new CurrentWeather(18, 5), []);
 
+    private readonly FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 16, 10, 0, 0, TimeSpan.Zero));
     private readonly ServiceProvider provider;
     private readonly StaleAwareCache cache;
 
     public StaleAwareCacheTests()
     {
-        provider = new ServiceCollection().AddHybridCache().Services.BuildServiceProvider();
+        provider = FakeClockCache.Create(time);
         cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>());
     }
 
@@ -72,9 +75,9 @@ public sealed class StaleAwareCacheTests : IDisposable
     [Requirement("R6"), FailureScenario]
     public async Task GetAsync_FailureAfterExpiry_ServesLastGoodAsStale()
     {
-        var freshFor = TimeSpan.FromMilliseconds(50);
+        var freshFor = TimeSpan.FromMinutes(1);
         await cache.GetAsync("flaky", _ => Task.FromResult(SourceResult.Ok(Sample)), freshFor, TimeSpan.FromHours(1), Ct);
-        await Task.Delay(TimeSpan.FromMilliseconds(150), Ct);
+        time.Advance(TimeSpan.FromMinutes(2));
 
         var result = await cache.GetAsync("flaky", _ => Task.FromResult(SourceResult.Unavailable<Weather>()), freshFor, TimeSpan.FromHours(1), Ct);
 
@@ -86,9 +89,9 @@ public sealed class StaleAwareCacheTests : IDisposable
     [Requirement("R6"), FailureScenario]
     public async Task GetAsync_FailureAfterExpiredNoData_ReturnsUnavailableNotStale()
     {
-        var freshFor = TimeSpan.FromMilliseconds(50);
+        var freshFor = TimeSpan.FromMinutes(1);
         await cache.GetAsync("nothing", _ => Task.FromResult(SourceResult.NoData<Weather>()), freshFor, TimeSpan.FromHours(1), Ct);
-        await Task.Delay(TimeSpan.FromMilliseconds(150), Ct);
+        time.Advance(TimeSpan.FromMinutes(2));
 
         var result = await cache.GetAsync("nothing", _ => Task.FromResult(SourceResult.Unavailable<Weather>()), freshFor, TimeSpan.FromHours(1), Ct);
 
@@ -110,6 +113,19 @@ public sealed class StaleAwareCacheTests : IDisposable
 
         Assert.Equal(1, calls);
         Assert.Equal(SourceStatus.NoData, second.Status);
+    }
+
+    [Fact]
+    public async Task HybridCacheReadOnlyLookup_OnAMiss_StoresNothing()
+    {
+        var hybrid = provider.GetRequiredService<HybridCache>();
+        var readOnly = new HybridCacheEntryOptions { Flags = HybridCacheEntryFlags.DisableUnderlyingData };
+
+        var miss = await hybrid.GetOrCreateAsync<string?>("missing", _ => ValueTask.FromResult<string?>("never called"), readOnly, cancellationToken: Ct);
+        var afterMiss = await hybrid.GetOrCreateAsync<string?>("missing", _ => ValueTask.FromResult<string?>("fetched"), cancellationToken: Ct);
+
+        Assert.Null(miss);
+        Assert.Equal("fetched", afterMiss);
     }
 
     public void Dispose() => provider.Dispose();

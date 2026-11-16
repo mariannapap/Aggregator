@@ -19,6 +19,6 @@ internal static class StatisticsEndpoints
         return endpoints;
     }
 
-    private static Ok<StatisticsResponse> GetStatistics(StatisticsStore store, IOptions<StatisticsOptions> options) =>
-        TypedResults.Ok(store.Snapshot().ToResponse(options.Value));
+    private static Ok<StatisticsResponse> GetStatistics(IStatisticsReader statistics, IOptions<StatisticsOptions> options) =>
+        TypedResults.Ok(statistics.Snapshot().ToResponse(options.Value));
 }

@@ -1,5 +1,7 @@
 # City Report Aggregator
 
+[![CI](https://github.com/mariannapap/Aggregator/actions/workflows/ci.yml/badge.svg)](https://github.com/mariannapap/Aggregator/actions/workflows/ci.yml)
+
 An ASP.NET Core (.NET 10) API that implements the **Gateway Aggregation** pattern over four keyless [Open-Meteo](https://open-meteo.com/) APIs. One request resolves a city to coordinates, then fans out **in parallel to the weather, air-quality and marine APIs** for every matching place, and returns one composite response.
 
 ```
@@ -47,13 +49,15 @@ TOKEN=$(curl -s -X POST http://localhost:8080/mock-login -H "Content-Type: appli
 curl -H "Authorization: Bearer $TOKEN" "http://localhost:8080/city-report/GR/Athens"
 ```
 
+[src/Aggregator.Api/Aggregator.Api.http](src/Aggregator.Api/Aggregator.Api.http) logs in and calls every endpoint from Visual Studio, Rider or VS Code (REST Client), including a degraded response (an inland city, where the marine API has no data).
+
 ### Run the tests
 
 ```bash
-docker build --target test .
+docker build --target test --progress=plain .
 ```
 
-Runs all unit and integration tests; the build fails if any test fails. No network access is needed: external APIs are replaced by fake HTTP handlers and recorded responses.
+Runs all unit and integration tests; the build fails if any test fails. No network access is needed: external APIs are replaced by fake HTTP handlers and recorded responses. With the .NET 10 SDK installed, `dotnet test` runs the same tests (`global.json` pins the SDK and selects Microsoft.Testing.Platform). CI runs both suites below on every push.
 
 ### End-to-end tests
 
@@ -154,14 +158,14 @@ All errors are RFC 9457 Problem Details.
 
 ### `GET /stats`
 
-Total requests and average response time **per external API**, grouped in performance buckets (thresholds configurable; defaults fast < 100 ms, average 100–200 ms, slow > 200 ms). Every real HTTP attempt is counted, retries included; cache hits are not, because they never reach the API.
+Total requests and average response time **per external API**, grouped in performance buckets (thresholds configurable; defaults fast < 100 ms, average 100–200 ms, slow > 200 ms). Every real HTTP attempt is counted, retries included; cache hits are not, because they never reach the API. `failedRequests` counts attempts that ended in a timeout, a network error, a 5xx or a 429; Open-Meteo's 400 ("no data for this request") is an answer, not a failure. Every API is listed from startup, and an average is `null` until there is something to average.
 
 ```json
 {
   "thresholds": { "fastBelowMs": 100, "slowAboveMs": 200 },
   "apis": {
     "weather": {
-      "totalRequests": 15, "averageMs": 140.22,
+      "totalRequests": 15, "failedRequests": 1, "averageMs": 140.22,
       "buckets": { "fast": { "count": 6, "averageMs": 63.97 }, "average": { "count": 5, "averageMs": 176.86 }, "slow": { "count": 4, "averageMs": 208.8 } }
     }
   }
@@ -180,7 +184,7 @@ A background service checks the statistics every minute and logs a warning when 
 
 | Project | Responsibility |
 |---|---|
-| `Aggregator.Core` | Model, the source contract, orchestration (`CityReportService`), query logic (fuzzy region matching, relevance, sorting, hourly window), statistics and anomaly detection. **Depends on nothing** but `Microsoft.Extensions.Options`. |
+| `Aggregator.Core` | Model, the source contract, orchestration (`CityReportService`), query logic (fuzzy region matching, relevance, sorting, hourly window), statistics and anomaly detection, and its own registration (`AddCore`). **Depends only on** the `Microsoft.Extensions` options and DI abstractions. |
 | `Aggregator.Infrastructure` | Open-Meteo adapters, HTTP clients and resilience, caching, the statistics handler. |
 | `Aggregator.Api` | Composition root: endpoints, contracts and mapping, validation, authentication, error handling, the background service. |
 

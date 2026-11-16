@@ -11,6 +11,7 @@ internal static class StatisticsMapper
                 snapshot => snapshot.Api,
                 snapshot => new ApiStatisticsResponse(
                     snapshot.TotalRequests,
+                    snapshot.FailedRequests,
                     snapshot.AverageMs,
                     new PerformanceBucketsResponse(
                         new BucketResponse(snapshot.Fast.Count, snapshot.Fast.AverageMs),

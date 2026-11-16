@@ -13,19 +13,19 @@ public sealed class FallbackLifecycleTests
         try
         {
             var fresh = await session.GetReportPlaceAsync(city);
-            Assert.Equal("ok", ApiSession.Status(fresh, "weather"));
+            Assert.Equal("ok", fresh.SourceStatus("weather"));
 
             await wireMock.FailAsync("weather");
             await Task.Delay(PastCacheTtl, TestContext.Current.CancellationToken);
             var stale = await session.GetReportPlaceAsync(city);
-            Assert.Equal("stale", ApiSession.Status(stale, "weather"));
+            Assert.Equal("stale", stale.SourceStatus("weather"));
             Assert.Equal(18.5, stale.GetProperty("weather").GetProperty("temperature").GetDouble());
-            Assert.Equal("ok", ApiSession.Status(stale, "airQuality"));
+            Assert.Equal("ok", stale.SourceStatus("airQuality"));
 
             await wireMock.ResetAsync();
             await Task.Delay(PastCacheTtl, TestContext.Current.CancellationToken);
             var recovered = await session.GetReportPlaceAsync(city);
-            Assert.Equal("ok", ApiSession.Status(recovered, "weather"));
+            Assert.Equal("ok", recovered.SourceStatus("weather"));
         }
         finally
         {

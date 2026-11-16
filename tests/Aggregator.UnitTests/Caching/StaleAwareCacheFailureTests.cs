@@ -1,7 +1,9 @@
 using Aggregator.Core.Model;
 using Aggregator.Infrastructure.Caching;
 using Microsoft.Extensions.Caching.Hybrid;
+using Aggregator.UnitTests.Support;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Caching;
 
@@ -9,18 +11,19 @@ namespace Aggregator.UnitTests.Caching;
 public sealed class StaleAwareCacheFailureTests : IDisposable
 {
     private const int Callers = 20;
-    private static readonly TimeSpan FreshFor = TimeSpan.FromMilliseconds(50);
+    private static readonly TimeSpan FreshFor = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan KeepLastGood = TimeSpan.FromHours(1);
-    private static readonly TimeSpan PastFreshness = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan PastFreshness = TimeSpan.FromMinutes(2);
     private static readonly Weather Old = new(new CurrentWeather(18, 5), []);
     private static readonly Weather New = new(new CurrentWeather(25, 9), []);
 
+    private readonly FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 16, 10, 0, 0, TimeSpan.Zero));
     private readonly ServiceProvider provider;
     private readonly StaleAwareCache cache;
 
     public StaleAwareCacheFailureTests()
     {
-        provider = new ServiceCollection().AddHybridCache().Services.BuildServiceProvider();
+        provider = FakeClockCache.Create(time);
         cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>());
     }
 
@@ -43,7 +46,7 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
     public async Task Stampede_WhileTheSourceFailsWithHistory_OneUpstreamCallAndEveryCallerGetsStale()
     {
         await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Ok(Old)), FreshFor, KeepLastGood, Ct);
-        await Task.Delay(PastFreshness, Ct);
+        time.Advance(PastFreshness);
         var source = new GatedSource(SourceResult.Unavailable<Weather>());
 
         var results = await RunConcurrentlyAsync(source);
@@ -80,9 +83,9 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
     [FailureScenario]
     public async Task LastGoodPastItsRetention_IsNotServed()
     {
-        var shortRetention = TimeSpan.FromMilliseconds(100);
+        var shortRetention = TimeSpan.FromMinutes(10);
         await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Ok(Old)), FreshFor, shortRetention, Ct);
-        await Task.Delay(TimeSpan.FromMilliseconds(400), Ct);
+        time.Advance(FreshFor + shortRetention + TimeSpan.FromMinutes(1));
 
         var result = await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Unavailable<Weather>()), FreshFor, shortRetention, Ct);
 
@@ -94,11 +97,11 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
     public async Task SourceRecovers_FreshValueReplacesStaleAndBecomesTheNewLastGood()
     {
         await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Ok(Old)), FreshFor, KeepLastGood, Ct);
-        await Task.Delay(PastFreshness, Ct);
+        time.Advance(PastFreshness);
         var stale = await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Unavailable<Weather>()), FreshFor, KeepLastGood, Ct);
 
         var recovered = await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Ok(New)), FreshFor, KeepLastGood, Ct);
-        await Task.Delay(PastFreshness, Ct);
+        time.Advance(PastFreshness);
         var staleAgain = await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Unavailable<Weather>()), FreshFor, KeepLastGood, Ct);
 
         Assert.Equal((SourceStatus.Stale, Old.Current), (stale.Status, stale.Value!.Current));
@@ -111,7 +114,7 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
     public async Task WhileServingStale_EveryRequestStillTriesTheSource()
     {
         await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Ok(Old)), FreshFor, KeepLastGood, Ct);
-        await Task.Delay(PastFreshness, Ct);
+        time.Advance(PastFreshness);
         var calls = 0;
         Task<SourceResult<Weather>> Failing(CancellationToken _)
         {
@@ -130,7 +133,7 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
     public async Task PartialResult_IsKeptAsLastGoodAndServedStaleWithItsData()
     {
         await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Partial(Old)), FreshFor, KeepLastGood, Ct);
-        await Task.Delay(PastFreshness, Ct);
+        time.Advance(PastFreshness);
 
         var result = await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Unavailable<Weather>()), FreshFor, KeepLastGood, Ct);
 
@@ -143,16 +146,16 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
     public async Task CallerCancelsDuringTheFetch_CancellationPropagatesAndNothingIsCached()
     {
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(Ct);
-        var calls = 0;
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         async Task<SourceResult<Weather>> Hanging(CancellationToken token)
         {
-            Interlocked.Increment(ref calls);
+            started.TrySetResult();
             await Task.Delay(Timeout.Infinite, token);
             return SourceResult.Ok(Old);
         }
 
         var pending = cache.GetAsync("key", Hanging, FreshFor, KeepLastGood, cancellation.Token);
-        await Task.Delay(50, Ct);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), Ct);
         await cancellation.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
@@ -165,7 +168,7 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
     public async Task UnexpectedExceptionInTheSource_PropagatesInsteadOfBeingHiddenAsStale()
     {
         await cache.GetAsync("key", _ => Task.FromResult(SourceResult.Ok(Old)), FreshFor, KeepLastGood, Ct);
-        await Task.Delay(PastFreshness, Ct);
+        time.Advance(PastFreshness);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             cache.GetAsync<Weather>("key", _ => throw new InvalidOperationException("bug"), FreshFor, KeepLastGood, Ct));

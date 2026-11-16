@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aggregator.Api.Auth;
 
-public sealed class AuthOptions
+internal sealed class AuthOptions
 {
     public const string SectionName = "Auth";
     public const string ReaderPolicy = "Reader";

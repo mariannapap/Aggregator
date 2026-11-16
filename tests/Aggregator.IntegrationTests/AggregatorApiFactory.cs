@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -8,6 +9,9 @@ namespace Aggregator.IntegrationTests;
 
 public sealed class AggregatorApiFactory : WebApplicationFactory<Program>
 {
+    // Every client gets one retry, so a failing call reaches the API this many times.
+    public const int AttemptsPerCall = 2;
+
     public OpenMeteoStub OpenMeteo { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -18,7 +22,7 @@ public sealed class AggregatorApiFactory : WebApplicationFactory<Program>
         foreach (var client in new[] { "Geocoding", "Weather", "AirQuality", "Marine" })
         {
             builder.UseSetting($"HttpClients:{client}:Resilience:Retry:Delay", "00:00:00.001");
-            builder.UseSetting($"HttpClients:{client}:Resilience:Retry:MaxRetryAttempts", "1");
+            builder.UseSetting($"HttpClients:{client}:Resilience:Retry:MaxRetryAttempts", (AttemptsPerCall - 1).ToString(CultureInfo.InvariantCulture));
         }
 
         builder.ConfigureTestServices(services =>

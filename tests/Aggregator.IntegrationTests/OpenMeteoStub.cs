@@ -11,7 +11,9 @@ public sealed class OpenMeteoStub : HttpMessageHandler
 {
     private readonly ConcurrentDictionary<string, ConcurrentQueue<Func<HttpResponseMessage>>> scripts = new();
     private readonly ConcurrentDictionary<string, TimeSpan> delays = new();
+    private readonly ConcurrentDictionary<string, Task> holds = new();
     private readonly ConcurrentDictionary<string, bool> down = new();
+    private readonly ConcurrentDictionary<string, string> omittedCurrentFields = new();
     private readonly ConcurrentDictionary<string, int> callsByHost = new();
     private readonly ConcurrentDictionary<string, int> inFlight = new();
     private readonly ConcurrentDictionary<string, int> maxInFlight = new();
@@ -31,12 +33,19 @@ public sealed class OpenMeteoStub : HttpMessageHandler
 
     public void SetDelay(string host, TimeSpan delay) => delays[host] = delay;
 
+    public void Hold(string host, Task release) => holds[host] = release;
+
+    public void OmitCurrentField(string host, string field) => omittedCurrentFields[host] = field;
+
     public void Script(string host, params HttpStatusCode[] statuses)
     {
         var queue = scripts.GetOrAdd(host, _ => new ConcurrentQueue<Func<HttpResponseMessage>>());
         foreach (var status in statuses)
             queue.Enqueue(() => Status(status));
     }
+
+    public void ScriptJson(string host, string json) =>
+        scripts.GetOrAdd(host, _ => new ConcurrentQueue<Func<HttpResponseMessage>>()).Enqueue(() => Json(json));
 
     public void ScriptTooManyRequests(string host, TimeSpan retryAfter) =>
         scripts.GetOrAdd(host, _ => new ConcurrentQueue<Func<HttpResponseMessage>>()).Enqueue(() =>
@@ -50,6 +59,9 @@ public sealed class OpenMeteoStub : HttpMessageHandler
 
     public int MaxInFlight(string host) => maxInFlight.GetValueOrDefault(host);
 
+    // Generated places sit at latitude 36 + 0.05 * index, so their temperatures are 18.5, 19.0, 19.5, …
+    public static double TemperatureAt(double latitude) => Math.Round(18.5 + (latitude - 36) * 10, 1);
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref calls);
@@ -60,6 +72,9 @@ public sealed class OpenMeteoStub : HttpMessageHandler
         maxInFlight.AddOrUpdate(host, current, (_, max) => Math.Max(max, current));
         try
         {
+            if (holds.TryGetValue(host, out var release))
+                await release.WaitAsync(cancellationToken);
+
             if (delays.TryGetValue(host, out var delay) && delay > TimeSpan.Zero)
                 await Task.Delay(delay, cancellationToken);
 
@@ -79,24 +94,29 @@ public sealed class OpenMeteoStub : HttpMessageHandler
         OpenMeteoHosts.Geocoding when GeneratedPlaces is { } count => Json(GeocodingResults(count)),
         OpenMeteoHosts.Geocoding when query["name"] == "Athens" => Fixture("geocoding-athens-gr.json"),
         OpenMeteoHosts.Geocoding => Fixture("geocoding-not-found.json"),
-        OpenMeteoHosts.Weather => Json(Series(query, ("temperature_2m", 18.5), ("wind_speed_10m", 7.2))),
-        OpenMeteoHosts.AirQuality => Json(Series(query, ("us_aqi", 54))),
-        OpenMeteoHosts.Marine => Json(Series(query, ("wave_height", 0.1), ("sea_surface_temperature", 20.5))),
+        OpenMeteoHosts.Weather => Json(Series(host, query, ("temperature_2m", TemperatureAt(Latitude(query))), ("wind_speed_10m", 7.2))),
+        OpenMeteoHosts.AirQuality => Json(Series(host, query, ("us_aqi", 54))),
+        OpenMeteoHosts.Marine => Json(Series(host, query, ("wave_height", 0.1), ("sea_surface_temperature", 20.5))),
         _ => Status(HttpStatusCode.NotFound)
     };
 
     private bool IsDown(string host) => down.GetValueOrDefault(host);
+
+    private static double Latitude(NameValueCollection query) => double.Parse(query["latitude"]!, CultureInfo.InvariantCulture);
 
     private static string GeocodingResults(int count) =>
         "{\"results\":[" + string.Join(',', Enumerable.Range(0, count).Select(index => string.Create(
             CultureInfo.InvariantCulture,
             $$"""{"name":"Place {{index}}","latitude":{{36 + index * 0.05}},"longitude":{{24 + index * 0.05}},"feature_code":"PPL","country_code":"GR","admin1":"{{(index % 2 == 0 ? "Attica" : "Crete")}}"}"""))) + "]}";
 
-    private static string Series(NameValueCollection query, params (string Field, double Value)[] fields)
+    private string Series(string host, NameValueCollection query, params (string Field, double Value)[] fields)
     {
         var parts = new List<string>();
         if (query["current"] is not null)
-            parts.Add("\"current\":{" + string.Join(',', fields.Select(field => Number(field.Field, field.Value))) + "}");
+        {
+            var omitted = omittedCurrentFields.GetValueOrDefault(host);
+            parts.Add("\"current\":{" + string.Join(',', fields.Where(field => field.Field != omitted).Select(field => Number(field.Field, field.Value))) + "}");
+        }
 
         if (query["start_hour"] is { } startHour)
         {

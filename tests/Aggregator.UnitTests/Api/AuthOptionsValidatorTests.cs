@@ -23,12 +23,15 @@ public sealed class AuthOptionsValidatorTests
     }
 
     [Theory]
-    [InlineData("http://login.example.com/tenant", false)]
-    [InlineData("not a url", false)]
-    [InlineData("https://login.microsoftonline.com/tenant/v2.0", true)]
+    [InlineData("http://login.example.com/tenant")]
+    [InlineData("not a url")]
     [FailureScenario]
-    public void Validate_MockDisabled_RequiresAbsoluteHttpsAuthority(string authority, bool valid) =>
-        Assert.Equal(valid, Validate(mockEnabled: false, authority).Succeeded);
+    public void Validate_MockDisabled_NonHttpsOrRelativeAuthority_Fails(string authority) =>
+        Assert.True(Validate(mockEnabled: false, authority).Failed);
+
+    [Fact]
+    public void Validate_MockDisabled_AbsoluteHttpsAuthority_Succeeds() =>
+        Assert.True(Validate(mockEnabled: false, "https://login.microsoftonline.com/tenant/v2.0").Succeeded);
 
     private static ValidateOptionsResult Validate(bool mockEnabled, string? authority) =>
         new AuthOptionsValidator(Options.Create(new MockAuthOptions { Enabled = mockEnabled }))

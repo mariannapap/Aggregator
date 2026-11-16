@@ -1,6 +1,6 @@
 namespace Aggregator.Api.Auth;
 
-public enum MockUser
+internal enum MockUser
 {
     Valid,
     Invalid,

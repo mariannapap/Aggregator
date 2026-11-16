@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Aggregator.Api.CityReports;
 
-public sealed class CityReportQuery
+internal sealed class CityReportQuery
 {
     [FromRoute(Name = "country")]
     [Description("ISO 3166-1 alpha-2 country code, e.g. GR. Case-insensitive.")]
@@ -30,11 +30,11 @@ public sealed class CityReportQuery
     public string? HourlyCategory { get; init; }
 
     [FromQuery(Name = "hourly.from")]
-    [Description("ISO 8601 date-time, inclusive. Clamped to the 24-hour window that starts at the current hour (UTC); clamping is reported in filters.hourly. Requires include=hourly.")]
+    [Description("ISO 8601 date-time, inclusive, e.g. 2026-11-15T18:00Z. Clamped to the hourly window that starts at the current hour (UTC; length set by CityReport:HourlyWindowHours); clamping is reported in filters.hourly. Requires include=hourly.")]
     public string? HourlyFrom { get; init; }
 
     [FromQuery(Name = "hourly.to")]
-    [Description("ISO 8601 date-time, inclusive. Clamped to the 24-hour window; must not be before hourly.from. Requires include=hourly.")]
+    [Description("ISO 8601 date-time, inclusive. Clamped to the hourly window; must not be before hourly.from. Requires include=hourly.")]
     public string? HourlyTo { get; init; }
 
     [FromQuery(Name = "hourly.sort")]

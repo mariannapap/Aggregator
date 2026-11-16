@@ -53,9 +53,6 @@ public sealed class ApiSession : IDisposable
 
     public void Dispose() => client.Dispose();
 
-    public static string? Status(JsonElement place, string source) =>
-        place.GetProperty("sources").GetProperty(source).GetString();
-
     private async Task LoginAsync()
     {
         var issuedAt = DateTime.UtcNow;

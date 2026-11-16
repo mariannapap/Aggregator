@@ -1,0 +1,52 @@
+# Calls every endpoint of a running instance: `docker compose up` (port 8080) or the "http" launch profile (port 5290).
+# Visual Studio (17.12+) and VS Code (REST Client) take the token from the "login" request.
+# Rider takes it from "login-rider", whose handler sets a global variable that overrides @token.
+
+@host = http://localhost:8080
+@token = {{login.response.body.$.access_token}}
+
+### Health (anonymous)
+GET {{host}}/health
+
+### Log in (Visual Studio, VS Code)
+# @name login
+POST {{host}}/mock-login
+Content-Type: application/json
+
+{"user": "valid"}
+
+### Log in (Rider)
+# @name login-rider
+POST {{host}}/mock-login
+Content-Type: application/json
+
+{"user": "valid"}
+
+> {% client.global.set("token", response.body.access_token); %}
+
+### Every place named Athens in Greece, nearest to the Acropolis first
+GET {{host}}/city-report/GR/Athens
+Authorization: Bearer {{token}}
+
+### Filters and sorting: Crete only, warmest first, weather hours of the window, latest first
+GET {{host}}/city-report/GR/Chania?region=crete&sort=-temperature&include=weather,hourly&hourly.category=weather&hourly.sort=-time
+Authorization: Bearer {{token}}
+
+### Degraded: Ioannina is inland, so the marine API has nothing for it (sources.marine = no_data) while the rest is ok
+GET {{host}}/city-report/GR/Ioannina
+Authorization: Bearer {{token}}
+
+### 404: no such city or airport
+GET {{host}}/city-report/GR/Xyzqwerty
+Authorization: Bearer {{token}}
+
+### 400: sort=temperature needs include=weather
+GET {{host}}/city-report/GR/Athens?include=airQuality&sort=temperature
+Authorization: Bearer {{token}}
+
+### Statistics per external API
+GET {{host}}/stats
+Authorization: Bearer {{token}}
+
+### 401: no token
+GET {{host}}/stats

@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aggregator.Infrastructure.Options;
 
-public sealed class GeocodingOptions
+internal sealed class GeocodingOptions
 {
     public const string SectionName = "Geocoding";
 

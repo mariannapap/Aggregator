@@ -5,6 +5,7 @@ namespace Aggregator.Infrastructure.Caching;
 
 internal sealed class StaleAwareCache(HybridCache cache)
 {
+    // HybridCache has no TryGet: a lookup is GetOrCreateAsync with a factory that is never called.
     private static readonly HybridCacheEntryOptions ReadOnly = new() { Flags = HybridCacheEntryFlags.DisableUnderlyingData };
 
     public async Task<SourceResult<T>> GetAsync<T>(
@@ -26,6 +27,8 @@ internal sealed class StaleAwareCache(HybridCache cache)
                 async token =>
                 {
                     var result = await fetch(token);
+
+                    // Throwing is the only way to make HybridCache store nothing, so a failure is never cached.
                     if (result.Status == SourceStatus.Unavailable)
                         throw new SourceUnavailableException();
 
@@ -39,6 +42,7 @@ internal sealed class StaleAwareCache(HybridCache cache)
         }
         catch (SourceUnavailableException) when (!cancellationToken.IsCancellationRequested)
         {
+            // Read-only lookup of the last good value: on a miss nothing is fetched or stored.
             var lastGood = await cache.GetOrCreateAsync<SourceResult<T>?>(
                 lastGoodKey,
                 _ => ValueTask.FromResult<SourceResult<T>?>(null),

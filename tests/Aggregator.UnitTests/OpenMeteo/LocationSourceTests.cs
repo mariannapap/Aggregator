@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aggregator.UnitTests.OpenMeteo;
 
-[Requirement("R3")]
+[Requirement("R2")]
 public sealed class LocationSourceTests
 {
     private static readonly HourlyWindow Window = HourlyWindow.StartingAtCurrentHour(Fixtures.RecordedAt, 24);

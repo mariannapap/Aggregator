@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unit and integration tests
+        run: docker build --target test --progress=plain .
+
+      - name: End-to-end tests (quick scenarios)
+        run: ./e2e/run.sh quick

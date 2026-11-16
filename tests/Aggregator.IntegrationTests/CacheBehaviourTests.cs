@@ -40,9 +40,9 @@ public sealed class CacheBehaviourTests
         await Task.Delay(PastShortTtl, Ct);
         var place = (await client.GetJsonAsync(Report)).GetProperty("places")[0];
 
-        Assert.Equal("stale", Status(place, "weather"));
-        Assert.Equal("ok", Status(place, "airQuality"));
-        Assert.Equal("ok", Status(place, "marine"));
+        Assert.Equal("stale", place.SourceStatus("weather"));
+        Assert.Equal("ok", place.SourceStatus("airQuality"));
+        Assert.Equal("ok", place.SourceStatus("marine"));
         Assert.Equal(1, factory.OpenMeteo.CallsTo(OpenMeteoHosts.AirQuality));
         Assert.Equal(1, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Marine));
     }
@@ -85,9 +85,6 @@ public sealed class CacheBehaviourTests
         Assert.Equal(1, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Marine));
         Assert.Equal(1, factory.OpenMeteo.CallsTo(OpenMeteoHosts.Geocoding));
     }
-
-    private static string? Status(JsonElement place, string source) =>
-        place.GetProperty("sources").GetProperty(source).GetString();
 
     private static List<string?> Names(JsonElement body) =>
         body.GetProperty("places").EnumerateArray().Select(place => place.GetProperty("city").GetString()).ToList();

@@ -47,7 +47,7 @@ public sealed class CityReportApiTests
     }
 
     [Fact]
-    [Requirement("R3"), Requirement("R4")]
+    [Requirement("R4")]
     public async Task CityReport_ValidRequest_AggregatesAllSourcesPerPlace()
     {
         await using var factory = new AggregatorApiFactory();
@@ -55,16 +55,16 @@ public sealed class CityReportApiTests
 
         var body = await client.GetJsonAsync("/city-report/GR/Athens?include=weather,airQuality,marine,hourly");
 
-        var places = body.GetProperty("places");
-        Assert.Equal(2, places.GetArrayLength());
-        var athens = places[0];
-        Assert.Equal("Athens", athens.GetProperty("city").GetString());
-        Assert.True(athens.GetProperty("weather").GetProperty("temperature").ValueKind == JsonValueKind.Number);
-        Assert.True(athens.GetProperty("airQuality").GetProperty("usAqi").ValueKind == JsonValueKind.Number);
-        Assert.True(athens.GetProperty("marine").GetProperty("waveHeight").ValueKind == JsonValueKind.Number);
-        Assert.Equal(24 * 5, athens.GetProperty("hourly").GetArrayLength());
-        foreach (var source in LocationSources.Prepend("geocoding"))
-            Assert.Equal("ok", athens.GetProperty("sources").GetProperty(source).GetString());
+        var places = body.GetProperty("places").EnumerateArray().ToList();
+        Assert.Equal(["Athens", "Athens International Airport"], places.Select(place => place.GetProperty("city").GetString()));
+        Assert.All(places, place =>
+        {
+            Assert.Equal(JsonValueKind.Number, place.GetProperty("weather").GetProperty("temperature").ValueKind);
+            Assert.Equal(JsonValueKind.Number, place.GetProperty("airQuality").GetProperty("usAqi").ValueKind);
+            Assert.Equal(JsonValueKind.Number, place.GetProperty("marine").GetProperty("waveHeight").ValueKind);
+            Assert.Equal(24 * 5, place.GetProperty("hourly").GetArrayLength());
+            Assert.All(LocationSources.Prepend("geocoding"), source => Assert.Equal("ok", place.SourceStatus(source)));
+        });
     }
 
     [Fact]
@@ -82,8 +82,8 @@ public sealed class CityReportApiTests
     }
 
     [Fact]
-    [Requirement("R3"), Requirement("R4")]
-    public async Task CityReport_WithMarine_AggregatesThreeLocationApisPerPlace()
+    [Requirement("R4")]
+    public async Task CityReport_WithMarine_ReturnsMarineValuesAndOnlyMarineHourlyRows()
     {
         await using var factory = new AggregatorApiFactory();
         var client = await factory.CreateAuthorizedClientAsync("valid");
@@ -99,8 +99,8 @@ public sealed class CityReportApiTests
     }
 
     [Fact]
-    [Requirement("R3"), Requirement("R4")]
-    public async Task CityReport_DefaultInclude_CallsWeatherAirQualityAndMarine()
+    [Requirement("R4")]
+    public async Task CityReport_DefaultInclude_ReturnsWeatherAirQualityAndMarineButNoHourly()
     {
         await using var factory = new AggregatorApiFactory();
         var client = await factory.CreateAuthorizedClientAsync("valid");
@@ -276,10 +276,13 @@ public sealed class CityReportApiTests
         factory.OpenMeteo.GeneratedPlaces = 4;
         var client = await factory.CreateAuthorizedClientAsync();
 
-        var body = await client.GetJsonAsync("/city-report/GR/Anywhere?region=krete&sort=-temperature&include=weather,marine,hourly&hourly.category=marine");
+        var body = await client.GetJsonAsync("/city-report/GR/Anywhere?region=krete&sort=temperature&include=weather,marine,hourly&hourly.category=marine");
 
         var places = body.GetProperty("places").EnumerateArray().ToList();
-        Assert.Equal(2, places.Count);
+        Assert.Equal(["Place 1", "Place 3"], places.Select(place => place.GetProperty("city").GetString()));
+        Assert.Equal(
+            [OpenMeteoStub.TemperatureAt(36.05), OpenMeteoStub.TemperatureAt(36.15)],
+            places.Select(place => place.GetProperty("weather").GetProperty("temperature").GetDouble()));
         Assert.All(places, place => Assert.Equal("Crete", place.GetProperty("region").GetString()));
         Assert.All(places, place => Assert.All(
             place.GetProperty("hourly").EnumerateArray(),

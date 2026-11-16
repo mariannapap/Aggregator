@@ -1,6 +1,6 @@
 namespace Aggregator.Api.Composition;
 
-public sealed class OpenApiUiOptions
+internal sealed class OpenApiUiOptions
 {
     public const string SectionName = "OpenApi";
 

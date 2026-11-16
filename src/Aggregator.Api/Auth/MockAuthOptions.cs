@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aggregator.Api.Auth;
 
-public sealed class MockAuthOptions
+internal sealed class MockAuthOptions
 {
     public const string SectionName = "MockAuth";
 

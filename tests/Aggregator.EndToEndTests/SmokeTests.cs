@@ -17,7 +17,7 @@ public sealed class SmokeTests
         var place = await session.GetReportPlaceAsync(E2EEnvironment.UniqueCity("Smoke"));
 
         foreach (var source in new[] { "geocoding", "weather", "airQuality", "marine" })
-            Assert.Equal("ok", ApiSession.Status(place, source));
+            Assert.Equal("ok", place.SourceStatus(source));
         Assert.Equal(18.5, place.GetProperty("weather").GetProperty("temperature").GetDouble());
         Assert.Equal(54, place.GetProperty("airQuality").GetProperty("usAqi").GetInt32());
         Assert.Equal(0.3, place.GetProperty("marine").GetProperty("waveHeight").GetDouble());

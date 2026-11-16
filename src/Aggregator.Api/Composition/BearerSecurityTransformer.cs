@@ -1,9 +1,11 @@
+using Aggregator.Api.Auth;
 using Microsoft.AspNetCore.OpenApi;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 
 namespace Aggregator.Api.Composition;
 
-internal sealed class BearerSecurityTransformer : IOpenApiDocumentTransformer
+internal sealed class BearerSecurityTransformer(IOptions<MockAuthOptions> mockOptions) : IOpenApiDocumentTransformer
 {
     public const string SchemeName = "Bearer";
 
@@ -16,7 +18,9 @@ internal sealed class BearerSecurityTransformer : IOpenApiDocumentTransformer
             Type = SecuritySchemeType.Http,
             Scheme = "bearer",
             BearerFormat = "JWT",
-            Description = "Get a token from POST /mock-login when mock auth is enabled."
+            Description = mockOptions.Value.Enabled
+                ? "A JWT bearer token. Get a test token from POST /mock-login."
+                : "A JWT bearer token from the configured identity provider."
         };
 
         return Task.CompletedTask;

@@ -5,12 +5,14 @@ using Aggregator.Api.Composition;
 using Aggregator.Api.Endpoints;
 using Aggregator.Api.ErrorHandling;
 using Aggregator.Api.Hosting;
+using Aggregator.Core;
 using Aggregator.Infrastructure;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddCore();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApiAuthentication();

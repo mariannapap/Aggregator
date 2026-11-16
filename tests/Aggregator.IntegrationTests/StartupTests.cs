@@ -12,6 +12,7 @@ public sealed class StartupTests
     [InlineData("Anomaly:WindowMinutes", "30", "RecentMinutesKept")]
     [InlineData("CityReport:HourlyWindowHours", "0", "HourlyWindowHours")]
     [InlineData("HttpClients:Weather:BaseUrl", "", "BaseUrl")]
+    [InlineData("HttpClients:Weather:BaseUrl", "https://api.open-meteo.com/v1", "ends with '/'")]
     [Requirement("R6"), FailureScenario]
     public async Task InvalidConfiguration_StopsTheAppAtStartup(string key, string value, string expectedInMessage)
     {

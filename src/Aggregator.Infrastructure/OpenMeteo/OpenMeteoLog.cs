@@ -12,4 +12,7 @@ internal static partial class OpenMeteoLog
 
     [LoggerMessage(EventId = 2003, Level = LogLevel.Information, Message = "{Source} returned incomplete data: {Detail}")]
     public static partial void IncompleteData(this ILogger logger, string source, string detail);
+
+    [LoggerMessage(EventId = 2004, Level = LogLevel.Warning, Message = "{Source} returned {Count} result(s) without coordinates; they were skipped")]
+    public static partial void ResultsWithoutCoordinates(this ILogger logger, string source, int count);
 }
