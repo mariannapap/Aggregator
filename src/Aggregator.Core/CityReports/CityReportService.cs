@@ -17,6 +17,12 @@ public sealed class CityReportService(
 {
     public async Task<CityReportOutcome> GetAsync(CityReportRequest request, CancellationToken cancellationToken)
     {
+        var window = request.Sections.HasFlag(ReportSections.Hourly)
+            ? HourlyWindow.StartingAtCurrentHour(timeProvider.GetUtcNow(), options.Value.HourlyWindowHours)
+            : null;
+        if (window is not null && !HourlyFilter.Overlaps(request.Hourly, window))
+            return new CityReportOutcome.HourlyRangeOutsideWindow(window);
+
         var geocoded = await geocoding.FetchAsync(new GeocodingQuery(request.City, request.Country), cancellationToken);
         if (geocoded.Status == SourceStatus.Unavailable)
             return new CityReportOutcome.GeocodingUnavailable();
@@ -24,10 +30,6 @@ public sealed class CityReportService(
             return new CityReportOutcome.CityNotFound();
 
         var (matchingPlaces, regionMatch) = FilterByRegion(places, request.Region);
-
-        var window = request.Sections.HasFlag(ReportSections.Hourly)
-            ? HourlyWindow.StartingAtCurrentHour(timeProvider.GetUtcNow(), options.Value.HourlyWindowHours)
-            : null;
         var hourlyRange = window is null ? null : HourlyFilter.ResolveRange(request.Hourly, window);
 
         var reports = await Task.WhenAll(matchingPlaces.Select(place =>

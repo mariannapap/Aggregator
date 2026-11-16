@@ -30,7 +30,7 @@ internal sealed class CityReportQuery
     public string? HourlyCategory { get; init; }
 
     [FromQuery(Name = "hourly.from")]
-    [Description("ISO 8601 date-time, inclusive, e.g. 2026-11-15T18:00Z. Clamped to the hourly window that starts at the current hour (UTC; length set by CityReport:HourlyWindowHours); clamping is reported in filters.hourly. Requires include=hourly.")]
+    [Description("ISO 8601 date-time, inclusive, e.g. 2026-11-15T18:00Z. Clamped to the hourly window that starts at the current hour (UTC; length set by CityReport:HourlyWindowHours); clamping is reported in filters.hourly. A range that does not overlap the window is rejected with 400. Requires include=hourly.")]
     public string? HourlyFrom { get; init; }
 
     [FromQuery(Name = "hourly.to")]

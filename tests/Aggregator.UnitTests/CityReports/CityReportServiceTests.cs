@@ -274,6 +274,20 @@ public sealed class CityReportServiceTests
         Assert.Equal(new DateTimeOffset(2026, 11, 16, 14, 0, 0, TimeSpan.Zero), range.AppliedTo);
     }
 
+    [Fact]
+    [Requirement("R5"), FailureScenario]
+    public async Task GetAsync_HourlyRangeOutsideTheWindow_IsRejectedBeforeAnySourceIsCalled()
+    {
+        var hourly = HourlyOptions.Default with { From = Now.AddDays(3), To = Now.AddDays(4) };
+
+        var outcome = await CreateService().GetAsync(Request(ReportSections.Weather | ReportSections.Hourly, hourly: hourly), Ct);
+
+        var outside = Assert.IsType<CityReportOutcome.HourlyRangeOutsideWindow>(outcome);
+        Assert.Equal(new DateTimeOffset(2026, 11, 15, 15, 0, 0, TimeSpan.Zero), outside.Window.Start);
+        Assert.Empty(geocoding.Queries);
+        Assert.Empty(weather.Queries);
+    }
+
     private static CityReport Found(CityReportOutcome outcome) => Assert.IsType<CityReportOutcome.Found>(outcome).Report;
 
     private static CityReportRequest Request(

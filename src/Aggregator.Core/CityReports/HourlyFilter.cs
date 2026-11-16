@@ -4,6 +4,10 @@ namespace Aggregator.Core.CityReports;
 
 internal static class HourlyFilter
 {
+    // Bounds are inclusive; a missing bound means the window's own edge.
+    public static bool Overlaps(HourlyOptions hourly, HourlyWindow window) =>
+        (hourly.From ?? window.Start) <= window.LastHour && (hourly.To ?? window.LastHour) >= window.Start;
+
     public static HourlyRange ResolveRange(HourlyOptions hourly, HourlyWindow window) =>
         new(
             hourly.From,

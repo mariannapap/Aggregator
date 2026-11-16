@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace Aggregator.IntegrationTests;
 
@@ -92,6 +94,28 @@ public sealed class SourceStatusApiTests
         Assert.Equal("stale", degraded.SourceStatus("weather"));
         Assert.Equal(fresh.GetProperty("weather").GetProperty("temperature").GetDouble(), degraded.GetProperty("weather").GetProperty("temperature").GetDouble());
         Assert.Equal("ok", degraded.SourceStatus("airQuality"));
+    }
+
+    [Theory]
+    [InlineData(-7, -1)]
+    [InlineData(3, 4)]
+    [Requirement("R5"), FailureScenario]
+    public async Task HourlyRangeOutsideTheWindow_Returns400NamingTheWindow_WithoutCallingAnyApi(int fromDays, int toDays)
+    {
+        await using var factory = new AggregatorApiFactory();
+        factory.OpenMeteo.GeneratedPlaces = 1;
+        var client = await factory.CreateAuthorizedClientAsync();
+        var now = DateTimeOffset.UtcNow;
+        var hour = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 0, 0, TimeSpan.Zero);
+
+        var response = await client.GetAsync(new Uri(string.Create(
+            CultureInfo.InvariantCulture,
+            $"{Report}?include=weather,hourly&hourly.from={hour.AddDays(fromDays):yyyy-MM-dd'T'HH:mm}Z&hourly.to={hour.AddDays(toDays):yyyy-MM-dd'T'HH:mm}Z"), UriKind.Relative), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+        Assert.Contains("must overlap the hourly window", problem.GetProperty("errors").GetProperty("hourly")[0].GetString(), StringComparison.Ordinal);
+        Assert.Equal(0, factory.OpenMeteo.Calls);
     }
 
     [Fact]

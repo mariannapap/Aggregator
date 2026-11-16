@@ -105,7 +105,7 @@ Tests are tagged with `[Requirement("R6")]` and `[FailureScenario]`; [tools/Test
 | `region` | query | region name, fuzzy-matched (`krete` → Crete, `attiki` → Attica, `macedonia` → both Macedonias) | none |
 | `sort` | query | `relevance`, `name`, `temperature`; prefix `-` for descending | `relevance` |
 | `hourly.category` | query | `weather`, `airQuality` or `marine`: narrows hourly rows to one section, which must also be in `include` (or `include=hourly` alone) | all included |
-| `hourly.from`, `hourly.to` | query | ISO 8601 date-times inside the 24 h window | whole window |
+| `hourly.from`, `hourly.to` | query | ISO 8601 date-times; bounds outside the 24 h window are clamped to it, and a range that does not overlap it at all returns `400` | whole window |
 | `hourly.sort` | query | `time` or `-time` | `time` |
 
 Example: `GET /city-report/GR/Chania?region=crete&sort=-temperature&include=weather,hourly&hourly.category=weather`

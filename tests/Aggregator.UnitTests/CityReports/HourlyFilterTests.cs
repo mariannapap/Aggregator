@@ -9,6 +9,34 @@ public sealed class HourlyFilterTests
     private static readonly DateTimeOffset Start = new(2026, 11, 15, 15, 0, 0, TimeSpan.Zero);
     private static readonly HourlyWindow Window = new(Start, 24);
 
+    [Theory]
+    [InlineData(-48, -24)]
+    [InlineData(-48, -1)]
+    [InlineData(24, 48)]
+    [InlineData(23.5, 30)]
+    [FailureScenario]
+    public void Overlaps_RangeEntirelyOutsideTheWindow_IsFalse(double fromHours, double toHours) =>
+        Assert.False(HourlyFilter.Overlaps(HourlyOptions.Default with { From = Start.AddHours(fromHours), To = Start.AddHours(toHours) }, Window));
+
+    [Theory]
+    [InlineData(-48, 0)]
+    [InlineData(23, 48)]
+    [InlineData(2, 5)]
+    [InlineData(-1, 30)]
+    public void Overlaps_RangeTouchingOrInsideTheWindow_IsTrue(double fromHours, double toHours) =>
+        Assert.True(HourlyFilter.Overlaps(HourlyOptions.Default with { From = Start.AddHours(fromHours), To = Start.AddHours(toHours) }, Window));
+
+    [Fact]
+    [FailureScenario]
+    public void Overlaps_OneBoundOnlyAndOutside_IsFalse()
+    {
+        Assert.False(HourlyFilter.Overlaps(HourlyOptions.Default with { From = Start.AddDays(2) }, Window));
+        Assert.False(HourlyFilter.Overlaps(HourlyOptions.Default with { To = Start.AddDays(-2) }, Window));
+    }
+
+    [Fact]
+    public void Overlaps_NoBounds_IsTrue() => Assert.True(HourlyFilter.Overlaps(HourlyOptions.Default, Window));
+
     [Fact]
     public void ResolveRange_NoBounds_CoversTheWholeWindow()
     {

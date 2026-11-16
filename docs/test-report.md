@@ -1,13 +1,13 @@
 # Test report
 
-Generated 2026-11-16 17:58 UTC from the xUnit results of the Docker `test-report` stage.
+Generated 2026-11-16 18:14 UTC from the xUnit results of the Docker `test-report` stage.
 
-**288 tests · 288 passed · 0 failed · 0 skipped · 8.3 s** ✅
+**301 tests · 301 passed · 0 failed · 0 skipped · 8.1 s** ✅
 
 | Test project | Tests | Passed | Failed | Time |
 |---|---|---|---|---|
-| Aggregator.UnitTests | 216 | 216 | 0 | 0.8 s |
-| Aggregator.IntegrationTests | 72 | 72 | 0 | 7.5 s |
+| Aggregator.UnitTests | 227 | 227 | 0 | 0.6 s |
+| Aggregator.IntegrationTests | 74 | 74 | 0 | 7.5 s |
 
 Each test is tagged with the requirement(s) it proves and whether it emulates a success or a failure scenario. A test with several data rows (a theory) counts as one scenario.
 
@@ -17,12 +17,12 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 | Requirement | | Success scenarios | Failure scenarios | Result |
 |---|---|---|---|---|
-| **R1** | .NET service using ASP.NET Core | 0 | 0 | every integration test hosts the ASP.NET Core app (72 tests) |
+| **R1** | .NET service using ASP.NET Core | 0 | 0 | every integration test hosts the ASP.NET Core app (74 tests) |
 | **R2** | Architecture that makes integrating new APIs easy | 11 | 16 | ✅ |
 | **R3** | Data from at least three external APIs, simultaneously | 2 | 0 | ✅ |
 | **R4** | Endpoint returning the aggregated data | 6 | 2 | ✅ |
-| **R5** | Filtering and sorting (date, relevance, category) | 47 | 18 | ✅ |
-| **R6** | Error handling, transient failures, fallback | 2 | 77 | ✅ |
+| **R5** | Filtering and sorting (date, relevance, category) | 49 | 22 | ✅ |
+| **R6** | Error handling, transient failures, fallback | 2 | 78 | ✅ |
 | **R7** | Unit tests | 0 | 0 | this report |
 | **R8** | Documentation | 7 | 0 | ✅ |
 | **R9** | Caching | 25 | 22 | ✅ |
@@ -109,6 +109,8 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Apply → keeps rows within inclusive bounds | success | ✅ | `HourlyFilterTests` |
 | Apply → no rows → returns empty | success | ✅ | `HourlyFilterTests` |
 | Apply → same hour → is ordered by category then metric | success | ✅ | `HourlyFilterTests` |
+| Overlaps → no bounds → is true | success | ✅ | `HourlyFilterTests` |
+| Overlaps → range touching or inside the window → is true (4 cases) | success | ✅ | `HourlyFilterTests` |
 | Resolve range → bounds inside window → are kept | success | ✅ | `HourlyFilterTests` |
 | Resolve range → no bounds → covers the whole window | success | ✅ | `HourlyFilterTests` |
 | Resolve range → offset bounds → are normalized to utc | success | ✅ | `HourlyFilterTests` |
@@ -136,6 +138,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Distance km → thessaloniki → is about three hundred kilometres | success | ✅ | `RelevanceCalculatorTests` |
 | City report → hourly category not included → returns 400 | failure | ✅ | `CityReportApiTests` |
 | City report → invalid query → returns 400 validation problem | failure | ✅ | `CityReportApiTests` |
+| Hourly range outside the window → returns 400 naming the window → without calling any api (2 cases) | failure | ✅ | `SourceStatusApiTests` |
 | Parse → city longer than configured limit → is rejected | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → hourly category not in include → is rejected (2 cases) | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → hourly parameters without hourly → are rejected | failure | ✅ | `CityReportQueryParserTests` |
@@ -148,8 +151,11 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Parse → region longer than configured limit → is rejected | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → several problems → reports all of them | failure | ✅ | `CityReportQueryParserTests` |
 | Parse → sort with more than one leading dash → is rejected (3 cases) | failure | ✅ | `CityReportQueryParserTests` |
+| Get → hourly range outside the window → is rejected before any source is called | failure | ✅ | `CityReportServiceTests` |
 | Get → hourly range outside window → is clamped and reported | failure | ✅ | `CityReportServiceTests` |
 | Get → region does not match → ignores filter and reports it | failure | ✅ | `CityReportServiceTests` |
+| Overlaps → one bound only and outside → is false | failure | ✅ | `HourlyFilterTests` |
+| Overlaps → range entirely outside the window → is false (4 cases) | failure | ✅ | `HourlyFilterTests` |
 | Resolve range → bounds outside window → are clamped and reported | failure | ✅ | `HourlyFilterTests` |
 | Match → nothing close → is not applied | failure | ✅ | `RegionMatcherTests` |
 
@@ -177,6 +183,7 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 | Too many requests with retry after → waits the requested time then recovers | failure | ✅ | `ResilienceTests` |
 | Transient failure then success → is retried and reported ok | failure | ✅ | `ResilienceTests` |
 | Answer without usable values → is no data → and the other sources are unaffected | failure | ✅ | `SourceStatusApiTests` |
+| Hourly range outside the window → returns 400 naming the window → without calling any api (2 cases) | failure | ✅ | `SourceStatusApiTests` |
 | Incomplete current values → are partial → and the hourly rows are kept | failure | ✅ | `SourceStatusApiTests` |
 | Malformed value after expiry → serves the last good value as stale | failure | ✅ | `SourceStatusApiTests` |
 | Malformed value from one source → degrades only that source | failure | ✅ | `SourceStatusApiTests` |
@@ -382,28 +389,28 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 |||
 |:---|:---|
-| Generated on: | 11/16/2026 - 17:58:25 |
+| Generated on: | 11/16/2026 - 18:14:29 |
 | Parser: | MultiReport (2x Cobertura) |
 | Assemblies: | 3 |
-| Classes: | 124 |
+| Classes: | 125 |
 | Files: | 108 |
-| **Line coverage:** | 91.2% (1753 of 1921) |
-| Covered lines: | 1753 |
+| **Line coverage:** | 91.3% (1766 of 1934) |
+| Covered lines: | 1766 |
 | Uncovered lines: | 168 |
-| Coverable lines: | 1921 |
-| Total lines: | 3130 |
-| **Branch coverage:** | 78.8% (800 of 1015) |
-| Covered branches: | 800 |
-| Total branches: | 1015 |
+| Coverable lines: | 1934 |
+| Total lines: | 3147 |
+| **Branch coverage:** | 79.1% (814 of 1029) |
+| Covered branches: | 814 |
+| Total branches: | 1029 |
 
 </details>
 
 #### Coverage
-<details><summary>Aggregator.Api - 81.6%</summary>
+<details><summary>Aggregator.Api - 81.7%</summary>
 
 |**Name**|**Line**|**Branch**|
 |:---|---:|---:|
-|**Aggregator.Api**|**81.6%**|**64.5%**|
+|**Aggregator.Api**|**81.7%**|**64.5%**|
 |Aggregator.Api.Auth.AuthOptions|100%||
 |Aggregator.Api.Auth.AuthOptionsValidator|100%|100%|
 |Aggregator.Api.Auth.AuthRegistration|100%|100%|
@@ -452,14 +459,15 @@ The end-to-end suite (`tests/Aggregator.EndToEndTests`) runs the Docker image ag
 
 |**Name**|**Line**|**Branch**|
 |:---|---:|---:|
-|**Aggregator.Core**|**99.7%**|**97.2%**|
+|**Aggregator.Core**|**99.7%**|**97.3%**|
 |Aggregator.Core.CityReports.CityReport|100%||
 |Aggregator.Core.CityReports.CityReportOptions|100%||
 |Aggregator.Core.CityReports.CityReportOutcome|100%||
 |Aggregator.Core.CityReports.CityReportOutcome.Found|100%||
+|Aggregator.Core.CityReports.CityReportOutcome.HourlyRangeOutsideWindow|100%||
 |Aggregator.Core.CityReports.CityReportRequest|100%||
-|Aggregator.Core.CityReports.CityReportService|100%|98%|
-|Aggregator.Core.CityReports.CityReportService<TResult>|100%|98%|
+|Aggregator.Core.CityReports.CityReportService|100%|98.1%|
+|Aggregator.Core.CityReports.CityReportService<TResult>|100%|98.1%|
 |Aggregator.Core.CityReports.HourlyFilter|100%|100%|
 |Aggregator.Core.CityReports.HourlyOptions|100%||
 |Aggregator.Core.CityReports.HourlyRange|100%|100%|

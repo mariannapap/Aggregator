@@ -1,3 +1,4 @@
+using System.Globalization;
 using Aggregator.Api.Auth;
 using Aggregator.Api.CityReports;
 using Aggregator.Api.Contracts;
@@ -39,6 +40,12 @@ internal static class CityReportEndpoints
         return await service.GetAsync(request, cancellationToken) switch
         {
             CityReportOutcome.Found found => TypedResults.Ok(found.Report.ToResponse()),
+            CityReportOutcome.HourlyRangeOutsideWindow outside => TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["hourly"] = [string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"hourly.from and hourly.to must overlap the hourly window, {outside.Window.Start:yyyy-MM-dd'T'HH:mm'Z'} to {outside.Window.LastHour:yyyy-MM-dd'T'HH:mm'Z'}.")]
+            }),
             CityReportOutcome.GeocodingUnavailable => TypedResults.Problem(
                 title: "Geocoding is unavailable",
                 detail: "The city could not be resolved to coordinates and no cached result exists.",
