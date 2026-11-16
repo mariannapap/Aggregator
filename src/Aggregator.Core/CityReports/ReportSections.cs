@@ -7,5 +7,6 @@ public enum ReportSections
     Weather = 1,
     AirQuality = 2,
     Marine = 4,
-    Hourly = 8
+    Hourly = 8,
+    Hazards = 16
 }

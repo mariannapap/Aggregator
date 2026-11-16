@@ -52,7 +52,7 @@ internal static class CityReportEndpoints
                 statusCode: StatusCodes.Status503ServiceUnavailable,
                 extensions: new Dictionary<string, object?>
                 {
-                    ["sources"] = new Dictionary<string, string> { [SourceNames.Geocoding] = SourceStatus.Unavailable.ToContract() }
+                    ["sources"] = new Dictionary<string, SourceResponse> { [SourceNames.Geocoding] = new(SourceStatus.Unavailable.ToContract(), null) }
                 }),
             _ => TypedResults.Problem(
                 title: "City not found",

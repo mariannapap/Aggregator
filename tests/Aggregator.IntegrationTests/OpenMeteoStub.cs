@@ -97,8 +97,26 @@ public sealed class OpenMeteoStub : HttpMessageHandler
         OpenMeteoHosts.Weather => Json(Series(host, query, ("temperature_2m", TemperatureAt(Latitude(query))), ("wind_speed_10m", 7.2))),
         OpenMeteoHosts.AirQuality => Json(Series(host, query, ("us_aqi", 54))),
         OpenMeteoHosts.Marine => Json(Series(host, query, ("wave_height", 0.1), ("sea_surface_temperature", 20.5))),
+        OpenMeteoHosts.Hazards => Json(HazardEvents(query)),
         _ => Status(HttpStatusCode.NotFound)
     };
+
+    // One wildfire at the centre of the requested box and one storm far outside any radius (which the adapter must drop).
+    private static string HazardEvents(NameValueCollection query)
+    {
+        var box = query["bbox"]!.Split(',').Select(value => double.Parse(value, CultureInfo.InvariantCulture)).ToArray();
+        var (longitude, latitude) = ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $$"""
+            {"events":[
+              {"title":"Wildfire near the place","categories":[{"id":"wildfires","title":"Wildfires"}],
+               "geometry":[{"date":"2026-11-15T10:00:00Z","type":"Point","coordinates":[{{longitude}},{{latitude}}]}]},
+              {"title":"Storm far away","categories":[{"id":"severeStorms","title":"Severe Storms"}],
+               "geometry":[{"date":"2026-11-15T10:00:00Z","type":"Point","coordinates":[{{longitude + 20}},{{latitude}}]}]}
+            ]}
+            """);
+    }
 
     private bool IsDown(string host) => down.GetValueOrDefault(host);
 

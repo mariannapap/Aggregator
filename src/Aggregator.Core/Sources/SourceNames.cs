@@ -6,4 +6,5 @@ public static class SourceNames
     public const string Weather = "weather";
     public const string AirQuality = "airQuality";
     public const string Marine = "marine";
+    public const string Hazards = "hazards";
 }

@@ -25,8 +25,12 @@ public sealed class SmokeTests
         var notFound = await session.GetAsync("/city-report/GR/Nowhere");
         Assert.Equal(HttpStatusCode.NotFound, notFound.StatusCode);
 
+        var withHazards = await (await session.GetAsync($"/city-report/GR/{E2EEnvironment.UniqueCity("Hazards")}?include=hazards"))
+            .Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+        Assert.Equal("no_data", withHazards.GetProperty("places")[0].SourceStatus("hazards"));
+
         var stats = await (await session.GetAsync("/stats")).Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
-        foreach (var api in new[] { "geocoding", "weather", "airQuality", "marine" })
+        foreach (var api in new[] { "geocoding", "weather", "airQuality", "marine", "hazards" })
             Assert.True(stats.GetProperty("apis").GetProperty(api).GetProperty("totalRequests").GetInt64() > 0);
     }
 }

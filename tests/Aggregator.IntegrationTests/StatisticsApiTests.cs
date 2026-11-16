@@ -7,7 +7,7 @@ namespace Aggregator.IntegrationTests;
 public sealed class StatisticsApiTests
 {
     private const string Report = "/city-report/GR/Anywhere";
-    private static readonly string[] AllApis = ["airQuality", "geocoding", "marine", "weather"];
+    private static readonly string[] AllApis = ["airQuality", "geocoding", "hazards", "marine", "weather"];
 
     [Fact]
     public async Task BeforeAnyCall_EveryApiIsListedWithNullAverages()

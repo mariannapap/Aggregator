@@ -14,6 +14,7 @@ public sealed class StartupTests
     [InlineData("HttpClients:Weather:BaseUrl", "", "BaseUrl")]
     [InlineData("HttpClients:Weather:BaseUrl", "https://api.open-meteo.com/v1", "ends with '/'")]
     [InlineData("CityReport:MaxPlaceLimit", "10", "DefaultPlaceLimit")]
+    [InlineData("Cache:SizeLimitMegabytes", "0", "SizeLimitMegabytes")]
     [Requirement("R6"), FailureScenario]
     public async Task InvalidConfiguration_StopsTheAppAtStartup(string key, string value, string expectedInMessage)
     {
@@ -36,6 +37,7 @@ public sealed class StartupTests
         AssertDecorated<LocationQuery, Weather>(services, SourceNames.Weather);
         AssertDecorated<LocationQuery, AirQuality>(services, SourceNames.AirQuality);
         AssertDecorated<LocationQuery, Marine>(services, SourceNames.Marine);
+        AssertDecorated<AreaQuery, Hazards>(services, SourceNames.Hazards);
     }
 
     private static void AssertDecorated<TQuery, TResult>(IServiceProvider services, string expectedName)

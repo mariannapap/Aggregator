@@ -15,6 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddCore();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddTelemetry(builder.Configuration);
 builder.Services.AddApiAuthentication();
 builder.Services.AddSingleton<CityReportQueryParser>();
 builder.Services.AddProblemDetails();

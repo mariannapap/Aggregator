@@ -5,10 +5,10 @@ using Microsoft.Extensions.Options;
 namespace Aggregator.UnitTests.Query;
 
 [Requirement("R5")]
-public sealed class RelevanceCalculatorTests
+public sealed class DistanceCalculatorTests
 {
-    private readonly RelevanceCalculator calculator =
-        new(Options.Create(new RelevanceOptions { ReferenceLatitude = 37.9715, ReferenceLongitude = 23.7257 }));
+    private readonly DistanceCalculator calculator =
+        new(Options.Create(new DistanceOptions { ReferenceLatitude = 37.9715, ReferenceLongitude = 23.7257 }));
 
     [Fact]
     public void DistanceKm_ReferencePoint_IsZero() =>

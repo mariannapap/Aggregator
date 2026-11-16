@@ -9,5 +9,6 @@ public sealed record PlaceResponse(
     WeatherResponse? Weather,
     AirQualityResponse? AirQuality,
     MarineResponse? Marine,
+    IReadOnlyList<HazardResponse>? Hazards,
     IReadOnlyList<HourlyReadingResponse>? Hourly,
-    IReadOnlyDictionary<string, string> Sources);
+    IReadOnlyDictionary<string, SourceResponse> Sources);

@@ -20,7 +20,7 @@ public sealed class StaleAwareCacheTests : IDisposable
     public StaleAwareCacheTests()
     {
         provider = FakeClockCache.Create(time);
-        cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance);
+        cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>(), time, NullLogger<StaleAwareCache>.Instance);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -115,6 +115,36 @@ public sealed class StaleAwareCacheTests : IDisposable
         Assert.Equal(1, calls);
         Assert.Equal(SourceStatus.NoData, second.Status);
     }
+
+    [Fact]
+    public async Task GetAsync_StampsTheFetchTime_AndACacheHitKeepsIt()
+    {
+        var fetchedAt = time.GetUtcNow();
+        await cache.GetAsync("stamped", _ => Task.FromResult(SourceResult.Ok(Sample)), TimeSpan.FromMinutes(5), TimeSpan.FromHours(1), Ct);
+        time.Advance(TimeSpan.FromMinutes(1));
+
+        var hit = await cache.GetAsync("stamped", _ => Task.FromResult(SourceResult.Ok(Sample)), TimeSpan.FromMinutes(5), TimeSpan.FromHours(1), Ct);
+
+        Assert.Equal(fetchedAt, hit.FetchedAt);
+    }
+
+    [Fact]
+    [Requirement("R6"), FailureScenario]
+    public async Task GetAsync_StaleValue_KeepsTheTimeItWasOriginallyFetched()
+    {
+        var fetchedAt = time.GetUtcNow();
+        await cache.GetAsync("aging", _ => Task.FromResult(SourceResult.Ok(Sample)), TimeSpan.FromMinutes(1), TimeSpan.FromHours(1), Ct);
+        time.Advance(TimeSpan.FromMinutes(30));
+
+        var stale = await cache.GetAsync("aging", _ => Task.FromResult(SourceResult.Unavailable<Weather>()), TimeSpan.FromMinutes(1), TimeSpan.FromHours(1), Ct);
+
+        Assert.Equal((SourceStatus.Stale, fetchedAt), (stale.Status, stale.FetchedAt));
+    }
+
+    [Fact]
+    [Requirement("R6"), FailureScenario]
+    public async Task GetAsync_Unavailable_HasNoFetchTime() =>
+        Assert.Null((await cache.GetAsync("down", _ => Task.FromResult(SourceResult.Unavailable<Weather>()), TimeSpan.FromMinutes(1), TimeSpan.FromHours(1), Ct)).FetchedAt);
 
     [Fact]
     public async Task HybridCacheReadOnlyLookup_OnAMiss_StoresNothing()

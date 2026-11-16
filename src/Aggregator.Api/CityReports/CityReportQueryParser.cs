@@ -12,7 +12,7 @@ internal sealed partial class CityReportQueryParser(IOptions<CityReportOptions> 
 {
     private const string HourlyToken = "hourly";
     private const ReportSections DefaultSections = ReportSectionsExtensions.DataSections;
-    private const string IncludeValues = "Allowed values: weather, airQuality, marine, hourly (comma-separated).";
+    private const string IncludeValues = "Allowed values: weather, airQuality, marine, hazards, hourly (comma-separated).";
 
     private static readonly string[] IsoFormats =
     [
@@ -30,12 +30,14 @@ internal sealed partial class CityReportQueryParser(IOptions<CityReportOptions> 
         [SourceNames.Weather] = ReportSections.Weather,
         [SourceNames.AirQuality] = ReportSections.AirQuality,
         [SourceNames.Marine] = ReportSections.Marine,
+        [SourceNames.Hazards] = ReportSections.Hazards,
         [HourlyToken] = ReportSections.Hourly
     }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     private static readonly FrozenDictionary<string, PlaceSortField> SortFields = new Dictionary<string, PlaceSortField>
     {
         ["relevance"] = PlaceSortField.Relevance,
+        ["distance"] = PlaceSortField.Distance,
         ["name"] = PlaceSortField.Name,
         ["temperature"] = PlaceSortField.Temperature
     }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
@@ -129,7 +131,7 @@ internal sealed partial class CityReportQueryParser(IOptions<CityReportOptions> 
         var descending = trimmed.StartsWith('-');
         if (!SortFields.TryGetValue(descending ? trimmed[1..] : trimmed, out var field))
         {
-            errors["sort"] = ["Allowed values: relevance, name, temperature; prefix with one '-' for descending."];
+            errors["sort"] = ["Allowed values: relevance, distance, name, temperature; prefix with one '-' for descending."];
             return PlaceSort.Default;
         }
 

@@ -32,7 +32,7 @@ internal sealed class GeocodingSource(HttpClient http, IOptions<GeocodingOptions
             .ToList();
         var places = matching
             .Where(result => result.Latitude is not null && result.Longitude is not null)
-            .Select(result => new Place(result.Name, result.CountryCode!.ToUpperInvariant(), result.Admin1, new Coordinates(result.Latitude!.Value, result.Longitude!.Value)))
+            .Select(result => new Place(result.Name, result.CountryCode!.ToUpperInvariant(), result.Admin1, new Coordinates(result.Latitude!.Value, result.Longitude!.Value), result.FeatureCode!))
             .ToList();
         if (places.Count < matching.Count)
             logger.ResultsWithoutCoordinates(Name, matching.Count - places.Count);

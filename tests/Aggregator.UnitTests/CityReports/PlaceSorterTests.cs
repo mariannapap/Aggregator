@@ -14,12 +14,25 @@ public sealed class PlaceSorterTests
     private static readonly PlaceReport[] Unordered = [Chania, Airport, Athens];
 
     [Fact]
-    public void Sort_Relevance_IsNearestFirst() =>
-        Assert.Equal([Athens, Airport, Chania], PlaceSorter.Sort(Unordered, new PlaceSort(PlaceSortField.Relevance, false)));
+    public void Sort_Distance_IsNearestFirst() =>
+        Assert.Equal([Athens, Airport, Chania], PlaceSorter.Sort(Unordered, new PlaceSort(PlaceSortField.Distance, false)));
 
     [Fact]
-    public void Sort_RelevanceDescending_IsFarthestFirst() =>
-        Assert.Equal([Chania, Airport, Athens], PlaceSorter.Sort(Unordered, new PlaceSort(PlaceSortField.Relevance, true)));
+    public void Sort_DistanceDescending_IsFarthestFirst() =>
+        Assert.Equal([Chania, Airport, Athens], PlaceSorter.Sort(Unordered, new PlaceSort(PlaceSortField.Distance, true)));
+
+    [Fact]
+    public void Sort_Relevance_IsBestMatchRankFirst_AndTiesKeepTheIncomingOrder()
+    {
+        var village = Report("Chania", "GR", "Peloponnese", 84, null, matchRank: 5);
+        var city = Report("Chania", "GR", "Crete", 275, null, matchRank: 2);
+        var otherVillage = Report("Chania", "GR", "Central Greece", 56, null, matchRank: 5);
+        var prefixOnly = Report("Chania Vasilakiou", "GR", "Peloponnese", 161, null, matchRank: 15);
+
+        var sorted = PlaceSorter.Sort([prefixOnly, village, city, otherVillage], PlaceSort.Default);
+
+        Assert.Equal([city, village, otherVillage, prefixOnly], sorted);
+    }
 
     [Fact]
     public void Sort_Name_IsAlphabeticalIgnoringCase()
@@ -88,12 +101,14 @@ public sealed class PlaceSorterTests
     public void Sort_Empty_ReturnsEmpty() =>
         Assert.Empty(PlaceSorter.Sort([], PlaceSort.Default));
 
-    private static PlaceReport Report(string name, string country, string region, double distanceKm, double? temperature) =>
+    private static PlaceReport Report(string name, string country, string region, double distanceKm, double? temperature, int matchRank = 0) =>
         new(
-            new Place(name, country, region, new Coordinates(0, 0)),
+            new Place(name, country, region, new Coordinates(0, 0), "PPL"),
             distanceKm,
-            SourceStatus.Ok,
+            matchRank,
+            new SourceState(SourceStatus.Ok, null),
             temperature is null ? SourceResult.Unavailable<Weather>() : SourceResult.Ok(new Weather(new CurrentWeather(temperature.Value, 5), [])),
+            null,
             null,
             null,
             null);

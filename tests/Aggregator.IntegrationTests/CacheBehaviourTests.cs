@@ -57,14 +57,14 @@ public sealed class CacheBehaviourTests
         var all = await client.GetJsonAsync(Report);
         var callsAfterFirst = AllApis.Select(factory.OpenMeteo.CallsTo).ToList();
         var crete = await client.GetJsonAsync($"{Report}?region=krete&sort=-temperature");
-        var byName = await client.GetJsonAsync($"{Report}?sort=name");
+        var byName = await client.GetJsonAsync($"{Report}?sort=-name");
 
         Assert.Equal(callsAfterFirst, AllApis.Select(factory.OpenMeteo.CallsTo).ToList());
         Assert.Equal(4, all.GetProperty("places").GetArrayLength());
         Assert.Equal(2, crete.GetProperty("places").GetArrayLength());
         Assert.All(crete.GetProperty("places").EnumerateArray(), place => Assert.Equal("Crete", place.GetProperty("region").GetString()));
         Assert.Equal(
-            Names(byName).Order(StringComparer.InvariantCultureIgnoreCase),
+            Names(byName).OrderDescending(StringComparer.InvariantCultureIgnoreCase),
             Names(byName));
         Assert.NotEqual(Names(all), Names(byName));
     }

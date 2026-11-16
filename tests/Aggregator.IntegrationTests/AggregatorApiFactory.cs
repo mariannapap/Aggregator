@@ -19,7 +19,7 @@ public sealed class AggregatorApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Testing");
         builder.UseSetting("MockAuth:Enabled", "true");
         builder.UseSetting("OpenApi:EnableUi", "false");
-        foreach (var client in new[] { "Geocoding", "Weather", "AirQuality", "Marine" })
+        foreach (var client in new[] { "Geocoding", "Weather", "AirQuality", "Marine", "Hazards" })
         {
             builder.UseSetting($"HttpClients:{client}:Resilience:Retry:Delay", "00:00:00.001");
             builder.UseSetting($"HttpClients:{client}:Resilience:Retry:MaxRetryAttempts", (AttemptsPerCall - 1).ToString(CultureInfo.InvariantCulture));

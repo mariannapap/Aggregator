@@ -25,8 +25,8 @@ public sealed class CacheRoundTripTests : IDisposable
 
     private static readonly IReadOnlyList<Place> Places =
     [
-        new("Athens", "GR", "Attica", new Coordinates(37.98376, 23.72784)),
-        new("Nowhere", "GR", null, new Coordinates(-12.5, 0.000001))
+        new("Athens", "GR", "Attica", new Coordinates(37.98376, 23.72784), "PPLC"),
+        new("Nowhere", "GR", null, new Coordinates(-12.5, 0.000001), "PPL")
     ];
 
     private readonly FakeTimeProvider time = new(Hour);
@@ -41,8 +41,8 @@ public sealed class CacheRoundTripTests : IDisposable
         sharedL2 = new InMemoryDistributedCache(time);
         writerProvider = FakeClockCache.Create(time, sharedL2);
         readerProvider = FakeClockCache.Create(time, sharedL2);
-        writer = new StaleAwareCache(writerProvider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance);
-        reader = new StaleAwareCache(readerProvider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance);
+        writer = new StaleAwareCache(writerProvider.GetRequiredService<HybridCache>(), time, NullLogger<StaleAwareCache>.Instance);
+        reader = new StaleAwareCache(readerProvider.GetRequiredService<HybridCache>(), time, NullLogger<StaleAwareCache>.Instance);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

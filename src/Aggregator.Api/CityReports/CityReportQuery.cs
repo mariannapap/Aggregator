@@ -14,7 +14,7 @@ internal sealed class CityReportQuery
     public string City { get; init; } = string.Empty;
 
     [FromQuery(Name = "include")]
-    [Description("Comma-separated sections: weather, airQuality, marine, hourly. Default: weather,airQuality,marine. Only the APIs needed for the requested sections are called. marine is no_data for places away from the sea. With hourly, rows come from the included sections (all three when include=hourly on its own).")]
+    [Description("Comma-separated sections: weather, airQuality, marine, hazards, hourly. Default: weather,airQuality,marine. Only the APIs needed for the requested sections are called. marine is no_data for places away from the sea. hazards (NASA EONET: open natural events such as wildfires and storms nearby) is opt-in and no_data when nothing is near. With hourly, rows come from the included weather, air-quality and marine sections (all three when none of them is included).")]
     public string? Include { get; init; }
 
     [FromQuery(Name = "region")]
@@ -22,7 +22,7 @@ internal sealed class CityReportQuery
     public string? Region { get; init; }
 
     [FromQuery(Name = "sort")]
-    [Description("relevance (distance from the Acropolis, nearest first; default), name or temperature. Prefix with '-' for descending. temperature requires include=weather; places without a temperature sort last.")]
+    [Description("relevance (default: best name match first, exact before prefix before contains, ignoring case and accents; then capital, administrative seat, town, airport; then the geocoder's order), distance (from the Acropolis, nearest first), name or temperature. Prefix with '-' for descending. temperature requires include=weather; places without a temperature sort last.")]
     public string? Sort { get; init; }
 
     [FromQuery(Name = "limit")]

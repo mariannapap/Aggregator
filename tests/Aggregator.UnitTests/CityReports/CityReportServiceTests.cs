@@ -10,14 +10,15 @@ namespace Aggregator.UnitTests.CityReports;
 public sealed class CityReportServiceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 15, 15, 20, 0, TimeSpan.Zero);
-    private static readonly Place Athens = new("Athens", "GR", "Attica", new Coordinates(37.98376, 23.72784));
-    private static readonly Place Airport = new("Athens International Airport", "GR", "Attica", new Coordinates(37.93636, 23.94447));
-    private static readonly Place Chania = new("Chania", "GR", "Crete", new Coordinates(35.51, 24.02));
+    private static readonly Place Athens = new("Athens", "GR", "Attica", new Coordinates(37.98376, 23.72784), "PPLC");
+    private static readonly Place Airport = new("Athens International Airport", "GR", "Attica", new Coordinates(37.93636, 23.94447), "AIRP");
+    private static readonly Place Chania = new("Chania", "GR", "Crete", new Coordinates(35.51, 24.02), "PPLA2");
 
     private readonly FakeSource<GeocodingQuery, IReadOnlyList<Place>> geocoding = new(SourceNames.Geocoding);
     private readonly FakeSource<LocationQuery, Weather> weather = new(SourceNames.Weather);
     private readonly FakeSource<LocationQuery, AirQuality> airQuality = new(SourceNames.AirQuality);
     private readonly FakeSource<LocationQuery, Marine> marine = new(SourceNames.Marine);
+    private readonly FakeSource<AreaQuery, Hazards> hazards = new(SourceNames.Hazards);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -56,7 +57,7 @@ public sealed class CityReportServiceTests
         var report = Found(await CreateService().GetAsync(Request(), Ct));
 
         var place = Assert.Single(report.Places);
-        Assert.Equal(SourceStatus.Stale, place.GeocodingStatus);
+        Assert.Equal(SourceStatus.Stale, place.Geocoding.Status);
         Assert.Equal(SourceStatus.Ok, place.Weather!.Status);
         Assert.Equal(SourceStatus.Unavailable, place.AirQuality!.Status);
         Assert.Equal(SourceStatus.Ok, place.Marine!.Status);
@@ -207,7 +208,7 @@ public sealed class CityReportServiceTests
 
     [Fact]
     [Requirement("R5")]
-    public async Task GetAsync_DefaultSort_IsNearestToReferenceFirst()
+    public async Task GetAsync_DefaultSort_IsExactNameFirstThenPrefixThenTheRest()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>([Chania, Airport, Athens]);
 
@@ -296,7 +297,7 @@ public sealed class CityReportServiceTests
 
         var report = Found(await CreateService().GetAsync(Request(page: new PlacePage(1, 2)), Ct));
 
-        Assert.Equal(["Place 3", "Place 2"], report.Places.Select(place => place.Place.Name));
+        Assert.Equal(["Place 1", "Place 2"], report.Places.Select(place => place.Place.Name));
         Assert.Equal((5, true), (report.Filters.TotalPlaces, report.Filters.Truncated));
         Assert.Equal((2, 2, 2), (weather.Queries.Count, airQuality.Queries.Count, marine.Queries.Count));
     }
@@ -338,11 +339,31 @@ public sealed class CityReportServiceTests
         Assert.Equal((5, 5, false), (report.Places.Count, report.Filters.TotalPlaces, report.Filters.Truncated));
     }
 
-    // Place i sits at latitude 36 + 0.1 i: higher means nearer the Acropolis, and its temperature is its latitude.
+    [Fact]
+    [Requirement("R5")]
+    public async Task GetAsync_DefaultSort_PutsTheBestNameMatchFirst_NotTheNearestPlace()
+    {
+        // Real geocoder answer for "Kos" in Greece (trimmed): the island town is far from Athens.
+        geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>(
+        [
+            new("Géfyra", "GR", "Peloponnese", new Coordinates(36.99, 22.39), "PPL"),
+            new("Kosta", "GR", "Peloponnese", new Coordinates(37.30, 23.12), "PPL"),
+            new("Kos", "GR", "South Aegean", new Coordinates(36.89, 27.29), "PPLA3"),
+            new("Kosmothea", "GR", "Attica", new Coordinates(38.12, 23.53), "PPL")
+        ]);
+
+        var relevance = Found(await CreateService().GetAsync(Request() with { City = "Kos" }, Ct));
+        var distance = Found(await CreateService().GetAsync(Request(sort: new PlaceSort(PlaceSortField.Distance, false)) with { City = "Kos" }, Ct));
+
+        Assert.Equal(["Kos", "Kosta", "Kosmothea", "Géfyra"], relevance.Places.Select(place => place.Place.Name));
+        Assert.Equal("Kosmothea", distance.Places[0].Place.Name);
+    }
+
+    // Place i sits at latitude 36 + 0.1 i, and its temperature is its latitude. None matches the searched name, so relevance keeps this order.
     private void RespondWithFivePlaces()
     {
         geocoding.Respond = _ => SourceResult.Ok<IReadOnlyList<Place>>(
-            [.. Enumerable.Range(0, 5).Select(index => new Place($"Place {index}", "GR", "Attica", new Coordinates(36 + index * 0.1, 24)))]);
+            [.. Enumerable.Range(0, 5).Select(index => new Place($"Place {index}", "GR", "Attica", new Coordinates(36 + index * 0.1, 24), "PPL"))]);
         weather.Respond = query => SourceResult.Ok(new Weather(new CurrentWeather(query.Coordinates.Latitude, 1), []));
         airQuality.Respond = _ => SourceResult.Ok(new AirQuality(new CurrentAirQuality(40), []));
         marine.Respond = _ => SourceResult.Ok(new Marine(new CurrentMarine(0.1, 20), []));
@@ -364,8 +385,9 @@ public sealed class CityReportServiceTests
             weather,
             airQuality,
             marine,
+            hazards,
             new RegionMatcher(Options.Create(new RegionMatchingOptions())),
-            new RelevanceCalculator(Options.Create(new RelevanceOptions { ReferenceLatitude = 37.9715, ReferenceLongitude = 23.7257 })),
+            new DistanceCalculator(Options.Create(new DistanceOptions { ReferenceLatitude = 37.9715, ReferenceLongitude = 23.7257 })),
             new FakeTimeProvider(Now),
             Options.Create(new CityReportOptions()));
 

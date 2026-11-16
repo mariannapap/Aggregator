@@ -4,16 +4,15 @@ internal static class PlaceSorter
 {
     public static List<PlaceReport> Sort(IEnumerable<PlaceReport> reports, PlaceSort sort) => sort.Field switch
     {
+        PlaceSortField.Distance => By(reports, report => report.DistanceKm, sort.Descending),
         PlaceSortField.Name => ByName(reports, sort.Descending),
         PlaceSortField.Temperature => ByTemperature(reports, sort.Descending),
-        _ => ByRelevance(reports, sort.Descending)
+        _ => By(reports, report => report.MatchRank, sort.Descending)
     };
 
-    private static List<PlaceReport> ByRelevance(IEnumerable<PlaceReport> reports, bool descending) =>
-        (descending
-            ? reports.OrderByDescending(report => report.DistanceKm)
-            : reports.OrderBy(report => report.DistanceKm))
-        .ToList();
+    // OrderBy is stable, so equal keys keep the incoming (geocoder) order.
+    private static List<PlaceReport> By<TKey>(IEnumerable<PlaceReport> reports, Func<PlaceReport, TKey> key, bool descending) =>
+        (descending ? reports.OrderByDescending(key) : reports.OrderBy(key)).ToList();
 
     private static List<PlaceReport> ByName(IEnumerable<PlaceReport> reports, bool descending) =>
         (descending

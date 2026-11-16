@@ -87,10 +87,13 @@ public sealed class StatisticsStoreTests
                 await Task.Delay(5, TestContext.Current.CancellationToken);
             countWhenReadingStarted = store.Total("weather").Count;
 
-            for (var snapshots = 0; snapshots < 2_000; snapshots++)
+            // Keep reading until the writers have demonstrably advanced; yielding lets them run even on a single CPU.
+            var readUntil = DateTime.UtcNow.AddSeconds(10);
+            for (var snapshots = 0; snapshots < 2_000 || (store.Total("weather").Count <= countWhenReadingStarted && DateTime.UtcNow < readUntil); snapshots++)
             {
                 foreach (var snapshot in store.Snapshot())
                     Assert.Equal(snapshot.TotalRequests, snapshot.Fast.Count + snapshot.Average.Count + snapshot.Slow.Count);
+                Thread.Yield();
             }
 
             countWhenReadingEnded = store.Total("weather").Count;

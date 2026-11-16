@@ -93,7 +93,7 @@ public sealed class CityReportApiTests
         var athens = body.GetProperty("places")[0];
         Assert.Equal(0.1, athens.GetProperty("marine").GetProperty("waveHeight").GetDouble());
         Assert.Equal(20.5, athens.GetProperty("marine").GetProperty("seaSurfaceTemperature").GetDouble());
-        Assert.Equal("ok", athens.GetProperty("sources").GetProperty("marine").GetString());
+        Assert.Equal("ok", athens.SourceStatus("marine"));
         Assert.Equal(48, athens.GetProperty("hourly").GetArrayLength());
         Assert.All(athens.GetProperty("hourly").EnumerateArray(), row => Assert.Equal("marine", row.GetProperty("category").GetString()));
     }
@@ -141,12 +141,11 @@ public sealed class CityReportApiTests
         var body = await client.GetJsonAsync("/city-report/GR/Athens");
 
         var athens = body.GetProperty("places")[0];
-        var sources = athens.GetProperty("sources");
-        Assert.Equal("unavailable", sources.GetProperty(down).GetString());
+        Assert.Equal("unavailable", athens.SourceStatus(down));
         Assert.False(athens.TryGetProperty(down, out _));
         foreach (var source in LocationSources.Where(source => source != down))
         {
-            Assert.Equal("ok", sources.GetProperty(source).GetString());
+            Assert.Equal("ok", athens.SourceStatus(source));
             Assert.True(athens.TryGetProperty(source, out _));
         }
     }
@@ -190,7 +189,7 @@ public sealed class CityReportApiTests
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
-        Assert.Equal("unavailable", problem.GetProperty("sources").GetProperty("geocoding").GetString());
+        Assert.Equal("unavailable", problem.GetProperty("sources").GetProperty("geocoding").GetProperty("status").GetString());
     }
 
     [Fact]

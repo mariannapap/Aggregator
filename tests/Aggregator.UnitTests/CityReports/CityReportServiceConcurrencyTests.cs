@@ -14,9 +14,9 @@ public sealed class CityReportServiceConcurrencyTests
 
     private static readonly IReadOnlyList<Place> ThreePlaces =
     [
-        new("Athens", "GR", "Attica", new Coordinates(37.98, 23.73)),
-        new("Piraeus", "GR", "Attica", new Coordinates(37.94, 23.65)),
-        new("Chania", "GR", "Crete", new Coordinates(35.51, 24.02))
+        new("Athens", "GR", "Attica", new Coordinates(37.98, 23.73), "PPLC"),
+        new("Piraeus", "GR", "Attica", new Coordinates(37.94, 23.65), "AIRP"),
+        new("Chania", "GR", "Crete", new Coordinates(35.51, 24.02), "PPLA2")
     ];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -77,10 +77,19 @@ public sealed class CityReportServiceConcurrencyTests
             weather,
             airQuality,
             marine,
+            new UnusedHazards(),
             new RegionMatcher(Options.Create(new RegionMatchingOptions())),
-            new RelevanceCalculator(Options.Create(new RelevanceOptions { ReferenceLatitude = 37.9715, ReferenceLongitude = 23.7257 })),
+            new DistanceCalculator(Options.Create(new DistanceOptions { ReferenceLatitude = 37.9715, ReferenceLongitude = 23.7257 })),
             new FakeTimeProvider(new DateTimeOffset(2026, 11, 15, 15, 20, 0, TimeSpan.Zero)),
             Options.Create(new CityReportOptions()));
+
+    private sealed class UnusedHazards : IExternalSource<AreaQuery, Hazards>
+    {
+        public string Name => SourceNames.Hazards;
+
+        public Task<SourceResult<Hazards>> FetchAsync(AreaQuery query, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Hazards are not part of these requests.");
+    }
 
     private sealed class StartCounter
     {

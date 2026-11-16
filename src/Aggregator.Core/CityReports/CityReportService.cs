@@ -10,8 +10,9 @@ public sealed class CityReportService(
     IExternalSource<LocationQuery, Weather> weather,
     IExternalSource<LocationQuery, AirQuality> airQuality,
     IExternalSource<LocationQuery, Marine> marine,
+    IExternalSource<AreaQuery, Hazards> hazards,
     RegionMatcher regionMatcher,
-    RelevanceCalculator relevance,
+    DistanceCalculator distance,
     TimeProvider timeProvider,
     IOptions<CityReportOptions> options)
 {
@@ -36,9 +37,11 @@ public sealed class CityReportService(
         var weatherFirst = request.Sort.Field == PlaceSortField.Temperature;
         var candidates = await Task.WhenAll(matchingPlaces.Select(async place => new PlaceReport(
             place,
-            relevance.DistanceKm(place.Coordinates),
-            geocoded.Status,
+            distance.DistanceKm(place.Coordinates),
+            PlaceRanker.Rank(place, request.City),
+            new SourceState(geocoded.Status, geocoded.FetchedAt),
             weatherFirst ? await FetchAsync(weather, CreateQuery(place, request, ReportSections.Weather, HourlyCategory.Weather, window), cancellationToken) : null,
+            null,
             null,
             null,
             null)));
@@ -77,7 +80,8 @@ public sealed class CityReportService(
             : FetchAsync(weather, CreateQuery(place, request, ReportSections.Weather, HourlyCategory.Weather, window), cancellationToken);
         var airQualityTask = FetchAsync(airQuality, CreateQuery(place, request, ReportSections.AirQuality, HourlyCategory.AirQuality, window), cancellationToken);
         var marineTask = FetchAsync(marine, CreateQuery(place, request, ReportSections.Marine, HourlyCategory.Marine, window), cancellationToken);
-        await Task.WhenAll(weatherTask, airQualityTask, marineTask);
+        var hazardsTask = FetchHazardsAsync(place, request, cancellationToken);
+        await Task.WhenAll(weatherTask, airQualityTask, marineTask, hazardsTask);
 
         var weatherResult = await weatherTask;
         var airQualityResult = await airQualityTask;
@@ -90,7 +94,7 @@ public sealed class CityReportService(
                 hourlyRange,
                 request.Hourly.SortDescending);
 
-        return candidate with { Weather = weatherResult, AirQuality = airQualityResult, Marine = marineResult, Hourly = hourly };
+        return candidate with { Weather = weatherResult, AirQuality = airQualityResult, Marine = marineResult, Hazards = await hazardsTask, Hourly = hourly };
     }
 
     private LocationQuery? CreateQuery(
@@ -109,6 +113,11 @@ public sealed class CityReportService(
 
         return new LocationQuery(place.Coordinates, options.Value.CoordinateDecimals, includeCurrent, includeHourly ? window : null);
     }
+
+    private async Task<SourceResult<Hazards>?> FetchHazardsAsync(Place place, CityReportRequest request, CancellationToken cancellationToken) =>
+        request.Sections.HasFlag(ReportSections.Hazards)
+            ? await hazards.FetchAsync(new AreaQuery(place.Coordinates, options.Value.CoordinateDecimals), cancellationToken)
+            : null;
 
     private static async Task<SourceResult<TResult>?> FetchAsync<TResult>(
         IExternalSource<LocationQuery, TResult> source,

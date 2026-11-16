@@ -79,6 +79,16 @@ public sealed class OpenApiDocumentTests(OpenApiDocumentFixture fixture) : IClas
             ["weather", "air quality", "marine"],
             api => Assert.Contains(api, Operation(CityReportPath, "get").GetProperty("summary").GetString(), StringComparison.Ordinal));
 
+    [Fact]
+    public void SourceStatus_IsDocumentedAsAnEnumWithEveryValue()
+    {
+        var status = fixture.Document.GetProperty("components").GetProperty("schemas").GetProperty("SourceStatusResponse");
+
+        Assert.Equal(
+            ["no_data", "ok", "partial", "stale", "unavailable"],
+            status.GetProperty("enum").EnumerateArray().Select(value => value.GetString()).Order(StringComparer.Ordinal));
+    }
+
     private static JsonElement BearerScheme(JsonElement document) =>
         document.GetProperty("components").GetProperty("securitySchemes").GetProperty("Bearer");
 

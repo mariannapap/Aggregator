@@ -28,7 +28,7 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
     public StaleAwareCacheFailureTests()
     {
         provider = FakeClockCache.Create(time);
-        cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>(), logger);
+        cache = new StaleAwareCache(provider.GetRequiredService<HybridCache>(), time, logger);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

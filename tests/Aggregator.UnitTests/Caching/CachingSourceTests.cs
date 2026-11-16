@@ -58,7 +58,7 @@ public sealed class CachingSourceTests : IDisposable
         var slowInner = new GatedCountingSource(gate.Task);
         var source = new CachingSource<GeocodingQuery, IReadOnlyList<Place>>(
             slowInner,
-            new StaleAwareCache(provider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance),
+            new StaleAwareCache(provider.GetRequiredService<HybridCache>(), TimeProvider.System, NullLogger<StaleAwareCache>.Instance),
             policy,
             new StaticOptionsMonitor(new SourceClientOptions { LastGoodRetention = TimeSpan.FromHours(1) }));
 
@@ -74,7 +74,7 @@ public sealed class CachingSourceTests : IDisposable
     [Fact]
     public async Task FetchAsync_SameQueryThroughDifferentSources_IsCachedSeparately()
     {
-        var sharedCache = new StaleAwareCache(provider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance);
+        var sharedCache = new StaleAwareCache(provider.GetRequiredService<HybridCache>(), TimeProvider.System, NullLogger<StaleAwareCache>.Instance);
         var options = new StaticOptionsMonitor(new SourceClientOptions { CacheTtl = TimeSpan.FromMinutes(5), LastGoodRetention = TimeSpan.FromHours(1) });
         var weatherInner = new NamedWeatherSource(SourceNames.Weather, 18);
         var marineInner = new NamedWeatherSource(SourceNames.Marine, 99);
@@ -100,7 +100,7 @@ public sealed class CachingSourceTests : IDisposable
     private CachingSource<GeocodingQuery, IReadOnlyList<Place>> CreateSource() =>
         new(
             inner,
-            new StaleAwareCache(provider.GetRequiredService<HybridCache>(), NullLogger<StaleAwareCache>.Instance),
+            new StaleAwareCache(provider.GetRequiredService<HybridCache>(), TimeProvider.System, NullLogger<StaleAwareCache>.Instance),
             policy,
             new StaticOptionsMonitor(new SourceClientOptions { LastGoodRetention = TimeSpan.FromHours(1) }));
 
@@ -113,7 +113,7 @@ public sealed class CachingSourceTests : IDisposable
         public Task<SourceResult<IReadOnlyList<Place>>> FetchAsync(GeocodingQuery query, CancellationToken cancellationToken)
         {
             Calls++;
-            return Task.FromResult(SourceResult.Ok<IReadOnlyList<Place>>([new Place(query.City, query.Country, null, new Coordinates(1, 1))]));
+            return Task.FromResult(SourceResult.Ok<IReadOnlyList<Place>>([new Place(query.City, query.Country, null, new Coordinates(1, 1), "PPL")]));
         }
     }
 
@@ -129,7 +129,7 @@ public sealed class CachingSourceTests : IDisposable
         {
             Interlocked.Increment(ref calls);
             await gate.WaitAsync(cancellationToken);
-            return SourceResult.Ok<IReadOnlyList<Place>>([new Place(query.City, query.Country, null, new Coordinates(1, 1))]);
+            return SourceResult.Ok<IReadOnlyList<Place>>([new Place(query.City, query.Country, null, new Coordinates(1, 1), "PPL")]);
         }
     }
 
