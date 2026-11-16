@@ -1,9 +1,11 @@
 using Aggregator.Core.Statistics;
+using Aggregator.UnitTests.Support;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Statistics;
 
+[Collection(RunsAlone.Name)]
 [Requirement("R11")]
 public sealed class StatisticsStoreTests
 {
@@ -64,12 +66,17 @@ public sealed class StatisticsStoreTests
         var store = CreateStore();
         using var stop = new CancellationTokenSource();
 
-        var writers = Enumerable.Range(0, 8).Select(writer => Task.Run(() =>
-        {
-            var i = 0;
-            while (!stop.IsCancellationRequested)
-                store.Record("weather", TimeSpan.FromMilliseconds(i++ % 300), succeeded: true);
-        }, TestContext.Current.CancellationToken)).ToList();
+        // Dedicated threads, not thread-pool ones: the writers spin until stopped and must not starve other work.
+        var writers = Enumerable.Range(0, 8).Select(writer => Task.Factory.StartNew(
+            () =>
+            {
+                var i = 0;
+                while (!stop.IsCancellationRequested)
+                    store.Record("weather", TimeSpan.FromMilliseconds(i++ % 300), succeeded: true);
+            },
+            TestContext.Current.CancellationToken,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default)).ToList();
 
         long countWhenReadingStarted;
         long countWhenReadingEnded;

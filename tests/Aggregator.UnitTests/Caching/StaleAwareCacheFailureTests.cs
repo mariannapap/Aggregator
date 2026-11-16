@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregator.UnitTests.Caching;
 
+[Collection(RunsAlone.Name)]
 [Requirement("R9"), Requirement("R6")]
 public sealed class StaleAwareCacheFailureTests : IDisposable
 {
@@ -72,11 +73,12 @@ public sealed class StaleAwareCacheFailureTests : IDisposable
         var cancelled = cache.GetAsync("key", source.FetchAsync, FreshFor, KeepLastGood, leaving.Token);
         await source.WaitUntilStartedAsync();
         var staying = Enumerable.Range(0, 3).Select(_ => cache.GetAsync("key", source.FetchAsync, FreshFor, KeepLastGood, Ct)).ToList();
-        await Task.Delay(50, Ct);
+        await Task.Delay(100, Ct);
         await leaving.CancelAsync();
-        source.Release();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled);
+        // The cancellation must be observed while the shared fetch is still held, not raced against its completion.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled.WaitAsync(TimeSpan.FromSeconds(10), Ct));
+        source.Release();
         var results = await Task.WhenAll(staying);
         Assert.Equal(1, source.Calls);
         Assert.All(results, result => Assert.Equal(SourceStatus.Ok, result.Status));

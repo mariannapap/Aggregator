@@ -12,6 +12,9 @@ public sealed class AnomalyBackgroundServiceTests
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
 
+    // Generous on purpose: the service runs on the thread pool, which can be slow to respond on a busy machine.
+    private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(30);
+
     private readonly FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 15, 15, 0, 0, TimeSpan.Zero));
     private readonly FakeLogger<AnomalyBackgroundService> logger = new();
 
@@ -20,11 +23,11 @@ public sealed class AnomalyBackgroundServiceTests
     [Fact]
     public async Task Tick_WithAnomaly_LogsWarning()
     {
-        var detector = new StubDetector(() => [new PerformanceAnomaly("weather", 300, 100, 6)]);
+        using var detector = new StubDetector(_ => [new PerformanceAnomaly("weather", 300, 100, 6)]);
         using var service = CreateService(detector);
 
         await service.StartAsync(Ct);
-        await AdvanceUntilLoggedAsync(1);
+        await TickUntilAsync(detector, () => logger.Collector.Count >= 1, "a log line");
         await service.StopAsync(Ct);
 
         var record = logger.Collector.GetSnapshot()[0];
@@ -37,14 +40,13 @@ public sealed class AnomalyBackgroundServiceTests
     [FailureScenario]
     public async Task Tick_DetectorThrows_LogsErrorAndKeepsRunning()
     {
-        var calls = 0;
-        var detector = new StubDetector(() => ++calls == 1
+        using var detector = new StubDetector(call => call == 1
             ? throw new InvalidOperationException("boom")
             : [new PerformanceAnomaly("airQuality", 400, 100, 5)]);
         using var service = CreateService(detector);
 
         await service.StartAsync(Ct);
-        await AdvanceUntilLoggedAsync(2);
+        await TickUntilAsync(detector, () => logger.Collector.Count >= 2, "two log lines");
         await service.StopAsync(Ct);
 
         var records = logger.Collector.GetSnapshot();
@@ -55,38 +57,54 @@ public sealed class AnomalyBackgroundServiceTests
     [Fact]
     public async Task Tick_NoAnomalies_RunsTheDetectorAndLogsNothing()
     {
-        var detections = 0;
-        using var service = CreateService(new StubDetector(() =>
-        {
-            Interlocked.Increment(ref detections);
-            return [];
-        }));
+        using var detector = new StubDetector(_ => []);
+        using var service = CreateService(detector);
 
         await service.StartAsync(Ct);
-        await AdvanceUntilAsync(() => Volatile.Read(ref detections) >= 3);
+        await TickUntilAsync(detector, () => detector.Calls >= 3, "three detector runs");
         await service.StopAsync(Ct);
 
-        Assert.True(detections >= 3, $"The detector ran {detections} time(s); expected at least 3.");
         Assert.Empty(logger.Collector.GetSnapshot());
     }
 
     private AnomalyBackgroundService CreateService(IAnomalyDetector detector) =>
         new(detector, Options.Create(new AnomalyOptions { Interval = Interval }), time, logger);
 
-    private Task AdvanceUntilLoggedAsync(int count) => AdvanceUntilAsync(() => logger.Collector.Count >= count);
-
-    private async Task AdvanceUntilAsync(Func<bool> done)
+    // Advances fake time one interval at a time and waits for the detector to signal each run, until done.
+    private async Task TickUntilAsync(StubDetector detector, Func<bool> done, string what)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var deadline = DateTime.UtcNow + Deadline;
         while (!done() && DateTime.UtcNow < deadline)
         {
             time.Advance(Interval);
-            await Task.Delay(20, Ct);
+            await detector.WaitForRunAsync(TimeSpan.FromMilliseconds(200));
         }
+
+        Assert.True(done(), $"Timed out after {Deadline.TotalSeconds:0} s waiting for {what}; the detector ran {detector.Calls} time(s).");
     }
 
-    private sealed class StubDetector(Func<IReadOnlyList<PerformanceAnomaly>> detect) : IAnomalyDetector
+    private sealed class StubDetector(Func<int, IReadOnlyList<PerformanceAnomaly>> detect) : IAnomalyDetector, IDisposable
     {
-        public IReadOnlyList<PerformanceAnomaly> Detect() => detect();
+        private readonly SemaphoreSlim ran = new(0);
+        private int calls;
+
+        public int Calls => Volatile.Read(ref calls);
+
+        public IReadOnlyList<PerformanceAnomaly> Detect()
+        {
+            var call = Interlocked.Increment(ref calls);
+            try
+            {
+                return detect(call);
+            }
+            finally
+            {
+                ran.Release();
+            }
+        }
+
+        public Task<bool> WaitForRunAsync(TimeSpan timeout) => ran.WaitAsync(timeout, Ct);
+
+        public void Dispose() => ran.Dispose();
     }
 }
